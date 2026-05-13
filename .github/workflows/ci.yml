@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Mirror pyproject classifiers: ">=3.10" supports 3.10–3.13.
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      # `python-version` here pins `UV_PYTHON` for the whole job, so
+      # subsequent `uv sync` / `uv run` commands actually use the
+      # matrix Python. Without this, `uv python install X.Y` only
+      # installs a Python; uv would then pick whichever interpreter
+      # satisfies `requires-python` (typically the newest cached one),
+      # and every matrix cell would silently run the same version.
+      - name: Install uv + pin Python
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'uv.lock'
+          python-version: ${{ matrix.python-version }}
+
+      # `--all-extras` pulls in both the `dev` group (ruff, mypy,
+      # vulture, pytest, respx) and the `embeddings` group
+      # (sentence-transformers). Without `embeddings`, mypy --strict
+      # fails to resolve the optional sentence_transformers import in
+      # atomicmemory/embeddings/sentence_transformers.py.
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Verify Python version
+        run: |
+          uv run python --version
+          uv run python -c "import sys; assert sys.version_info[:2] == tuple(int(x) for x in '${{ matrix.python-version }}'.split('.')), f'expected ${{ matrix.python-version }} but got {sys.version}'"
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Mypy strict
+        run: uv run mypy atomicmemory --strict
+
+      # `.vulture_whitelist.py` is required: it allowlists Protocol-method
+      # parameter names and context-manager dunder args that vulture
+      # otherwise flags as unused.
+      - name: Vulture (dead code)
+        run: uv run vulture atomicmemory tests .vulture_whitelist.py --min-confidence 90
+
+      # Excludes integration tests (`-m integration` requires a live
+      # atomicmemory-core via ATOMICMEMORY_TEST_API_URL).
+      - name: Pytest
+        run: uv run pytest -m 'not integration'
