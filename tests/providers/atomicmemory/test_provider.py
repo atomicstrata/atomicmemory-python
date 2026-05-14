@@ -251,7 +251,7 @@ def test_health_returns_ok_flag(provider: AtomicMemoryProvider) -> None:
 def test_capabilities_advertises_atomicmemory_namespace(
     provider: AtomicMemoryProvider,
 ) -> None:
-    """Phase 3: every advertised custom_extension must resolve via get_extension."""
+    """Every advertised custom_extension must resolve via get_extension."""
     caps = provider.capabilities()
 
     assert caps.custom_extensions is not None

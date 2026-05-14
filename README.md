@@ -1,8 +1,21 @@
 # atomicmemory-python
 
+[![CI](https://github.com/atomicstrata/atomicmemory-python/actions/workflows/ci.yml/badge.svg)](https://github.com/atomicstrata/atomicmemory-python/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/atomicmemory?label=pypi)](https://pypi.org/project/atomicmemory/)
+[![Python](https://img.shields.io/pypi/pyversions/atomicmemory)](https://pypi.org/project/atomicmemory/)
+[![Docs](https://img.shields.io/badge/docs-docs.atomicstrata.ai-blue)](https://docs.atomicstrata.ai)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 Python client SDK for [AtomicMemory](https://github.com/atomicstrata) memory and artifact storage.
 
-A backend-agnostic memory and storage client: ingest conversations and documents, search them semantically, package retrieval-ready context, register or upload raw artifacts, and access AtomicMemory-specific features (lifecycle, audit, lessons, agents/trust, runtime config) through typed namespace handles.
+**Docs:** [docs.atomicstrata.ai](https://docs.atomicstrata.ai)
+
+AtomicMemory Core currently reaches cost-Pareto SOTA on BEAM-100K, BEAM-1M, and LoCoMo10, with BEAM-10M parity against the strongest published Mem0-new result. This package brings that memory layer to Python services, agents, notebooks, and evaluation workflows.
+
+A backend-agnostic memory and storage client: ingest conversations and
+documents, search them semantically, package retrieval-ready context, register
+or upload raw artifacts, and access AtomicMemory-specific features (lifecycle,
+audit, lessons, agents/trust, runtime config) through typed namespace handles.
 
 This is a Python port of the TypeScript [`atomicmemory-sdk`](https://github.com/atomicstrata/atomicmemory-sdk). It mirrors the public surface 1:1 while staying idiomatic to Python (Pydantic models, `httpx` sync + async clients, `match` statements, `snake_case`).
 
@@ -10,7 +23,16 @@ This is a Python port of the TypeScript [`atomicmemory-sdk`](https://github.com/
 
 Stable release — `1.0.0` on [PyPI](https://pypi.org/project/atomicmemory/).
 
+## Installation
+
+```bash
+pip install atomicmemory                    # core + local search + SQLite store
+pip install 'atomicmemory[embeddings]'      # + sentence-transformers for local embeddings
+```
+
 ## Quick start
+
+Prerequisite: start `atomicmemory-core` first. Follow the [Core Quickstart](https://docs.atomicstrata.ai/quickstart) if you do not already have a backend at `http://localhost:3050`.
 
 ```python
 from atomicmemory import AtomicMemoryClient
@@ -73,6 +95,30 @@ health = client.memory.atomicmemory.config.health()
 
 Categories: `lifecycle`, `audit`, `lessons`, `config`, `agents`.
 
+## Memory providers
+
+The memory namespace supports the same provider family as the TypeScript SDK:
+
+- `atomicmemory` — AtomicMemory core backend.
+- `mem0` — Mem0 OSS or hosted backend.
+- `hindsight` — Hindsight Cloud or self-hosted backend.
+
+```python
+from atomicmemory import MemoryClient
+
+with MemoryClient(
+    providers={
+        "hindsight": {
+            "apiUrl": "http://localhost:8888",
+            "apiVersion": "v1",
+            "projectId": "default",
+        }
+    }
+) as memory:
+    memory.initialize()
+    page = memory.search({"query": "seat preference", "scope": {"user": "demo"}})
+```
+
 ## Artifact storage
 
 The `client.storage` namespace mirrors the TypeScript SDK's direct storage API:
@@ -85,13 +131,6 @@ The `client.storage` namespace mirrors the TypeScript SDK's direct storage API:
 
 Every storage request sends `Authorization: Bearer <apiKey>` and `X-AtomicMemory-User-Id`. The SDK never sends the legacy `?user_id=` URL parameter.
 
-## Installation
-
-```bash
-pip install atomicmemory                    # core + local search + SQLite store
-pip install 'atomicmemory[embeddings]'      # + sentence-transformers for local embeddings
-```
-
 ## Development
 
 ```bash
@@ -103,6 +142,18 @@ uv run mypy atomicmemory --strict
 uv run vulture atomicmemory tests .vulture_whitelist.py --min-confidence 90
 ```
 
+### Live provider smoke tests
+
+Live provider tests are opt-in and are not required for normal development.
+They assume the backend is already running and configured with its own model.
+
+```bash
+ATOMICMEMORY_HINDSIGHT_INTEGRATION=1 \
+HINDSIGHT_API_URL=http://localhost:8890 \
+HINDSIGHT_TIMEOUT_SECONDS=120 \
+uv run pytest tests/providers/hindsight/test_integration.py -m integration -ra
+```
+
 ## License
 
-MIT
+Apache-2.0

@@ -97,6 +97,15 @@ def test_provider_status_after_initialize_reports_capabilities() -> None:
     assert "verbatim" in statuses[0].capabilities.ingest_modes
 
 
+def test_hindsight_provider_is_registered() -> None:
+    with MemoryClient(providers={"hindsight": {"api_url": "http://hindsight.test"}}) as client:
+        client.initialize()
+        statuses = client.get_provider_status()
+
+    assert statuses[0].name == "hindsight"
+    assert statuses[0].initialized is True
+
+
 @respx.mock
 def test_atomicmemory_property_returns_handle_when_provider_configured() -> None:
     from atomicmemory.providers.atomicmemory.handle_impl import AtomicMemoryHandle

@@ -1,8 +1,8 @@
 """Sync AtomicMemoryProvider — V3 core methods + Packager + TemporalSearch + Versioner + Health.
 
 Port of `atomicmemory-sdk/src/memory/atomicmemory-provider/atomicmemory-provider.ts`.
-The handle namespace (lifecycle/audit/lessons/config/agents) is wired in
-Phase 3 via :mod:`atomicmemory.providers.atomicmemory.handle_impl`.
+The handle namespace (lifecycle/audit/lessons/config/agents) is wired via
+:mod:`atomicmemory.providers.atomicmemory.handle_impl`.
 """
 
 from __future__ import annotations
@@ -238,7 +238,7 @@ class AtomicMemoryProvider(BaseMemoryProvider):
 
 
 # ---------------------------------------------------------------------------
-# Body builders — pure functions, shared with the async provider in Phase 4.
+# Body builders — pure functions shared with the async provider.
 # ---------------------------------------------------------------------------
 
 

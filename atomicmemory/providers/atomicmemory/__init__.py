@@ -3,7 +3,7 @@
 Port of `atomicmemory-sdk/src/memory/atomicmemory-provider/`. Importing
 this package registers the provider on
 `atomicmemory.memory.registry.default_registry` (and the async registry
-once Phase 4 lands).
+when both sync and async clients are available).
 """
 
 from atomicmemory.memory.registry import (

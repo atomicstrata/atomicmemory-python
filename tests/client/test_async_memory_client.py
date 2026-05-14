@@ -89,6 +89,16 @@ async def test_atomicmemory_handle_property_returns_async_handle() -> None:
 
 
 @pytest.mark.asyncio
+async def test_hindsight_provider_is_registered_async() -> None:
+    async with AsyncMemoryClient(providers={"hindsight": {"api_url": "http://hindsight.test"}}) as client:
+        await client.initialize()
+        statuses = client.get_provider_status()
+
+    assert statuses[0].name == "hindsight"
+    assert statuses[0].initialized is True
+
+
+@pytest.mark.asyncio
 @respx.mock
 async def test_dict_ingest_routes_through_to_provider() -> None:
     respx.post("http://core.test/v1/memories/ingest").mock(

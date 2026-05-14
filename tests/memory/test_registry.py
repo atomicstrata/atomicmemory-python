@@ -76,3 +76,10 @@ def test_contains() -> None:
     registry.register("stub", lambda _cfg: ProviderRegistration(provider=_Stub()))
     assert "stub" in registry
     assert "missing" not in registry
+
+
+def test_default_registry_includes_hindsight() -> None:
+    import atomicmemory.providers.hindsight  # noqa: F401
+    from atomicmemory.memory.registry import default_registry
+
+    assert "hindsight" in default_registry
