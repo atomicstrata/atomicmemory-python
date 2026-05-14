@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://docs.atomicmemory.ai
+    about: Read the AtomicMemory docs and quickstarts.
+  - name: Discussions
+    url: https://github.com/atomicstrata/atomicmemory-python/discussions
+    about: Ask questions, share ideas, and discuss roadmap items.

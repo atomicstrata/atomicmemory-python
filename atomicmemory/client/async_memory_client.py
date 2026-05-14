@@ -14,6 +14,7 @@ from typing import Any
 
 # Importing the provider packages registers both sync and async factories.
 import atomicmemory.providers.atomicmemory
+import atomicmemory.providers.hindsight
 import atomicmemory.providers.mem0  # noqa: F401
 from atomicmemory.client.memory_client import (
     _coerce_ingest,

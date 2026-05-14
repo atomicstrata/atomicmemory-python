@@ -1,0 +1,35 @@
+name: Provider Request
+description: Request support for a memory, embedding, LLM, storage, or reranking provider.
+labels: [provider]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider name
+      placeholder: "Provider or service name"
+    validations:
+      required: true
+  - type: dropdown
+    id: provider-type
+    attributes:
+      label: Provider type
+      options:
+        - Memory backend
+        - Embedding model
+        - LLM
+        - Reranker
+        - Storage
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What workflow would this provider enable?
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: API docs or references

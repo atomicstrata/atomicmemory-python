@@ -1,0 +1,27 @@
+name: Benchmark Case
+description: Propose a benchmark, regression case, or evaluation scenario.
+labels: [benchmark]
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Scenario
+      description: What behavior should the benchmark measure?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected signal
+      description: What would a good result demonstrate?
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Dataset or fixture
+      description: Link or describe the data needed to reproduce the case.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes

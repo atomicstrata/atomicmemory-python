@@ -4,7 +4,7 @@ Port of `atomicmemory-sdk/src/client/memory-client.ts`. Wraps a
 :class:`atomicmemory.memory.service.MemoryService` and the configured
 providers, providing the public API users construct in application
 code. Async users get the same surface via
-``atomicmemory.AsyncMemoryClient`` (Phase 4).
+``atomicmemory.AsyncMemoryClient``.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 # Importing the provider packages registers their factories.
 import atomicmemory.providers.atomicmemory
+import atomicmemory.providers.hindsight
 import atomicmemory.providers.mem0  # noqa: F401
 from atomicmemory.core.errors import ConfigError, NotInitializedError, ValidationError
 from atomicmemory.core.validation import sanitized_pydantic_errors

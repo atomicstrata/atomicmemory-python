@@ -1,0 +1,39 @@
+name: Bug Report
+description: Report a reproducible bug in the AtomicMemory Python SDK.
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal code sample or repository when possible.
+      placeholder: |
+        1. Install package version ...
+        2. Configure provider ...
+        3. Run ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      placeholder: "atomicmemory==..."
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.10, 3.11, 3.12, or 3.13"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or errors
+      render: shell

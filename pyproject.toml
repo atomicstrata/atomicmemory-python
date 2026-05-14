@@ -1,16 +1,16 @@
 [project]
 name = "atomicmemory"
-version = "1.0.0"
+version = "1.0.1"
 description = "Python client SDK for AtomicMemory memory and artifact storage."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "AtomicMemory" }]
-keywords = ["memory", "llm", "agent", "rag", "atomicmemory", "mem0"]
+keywords = ["memory", "llm", "agent", "rag", "atomicmemory", "mem0", "hindsight"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
@@ -99,15 +99,15 @@ init_forbid_extra = false
 init_typed = true
 warn_required_dynamic_aliases = false
 
-# Optional-extras module overrides are added back when Phase 5 lands the
-# `embeddings` adapter; mypy warns on overrides that do not match any
-# imported module, so the section stays out until then.
+# Optional-extras module overrides should be added only when the
+# corresponding adapter imports exist; mypy warns on overrides that do
+# not match any imported module.
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
-    "integration: requires a live atomicmemory-core instance (set ATOMICMEMORY_TEST_API_URL)",
+    "integration: requires a live backend and explicit provider-specific environment",
 ]
 addopts = "-ra"
 
