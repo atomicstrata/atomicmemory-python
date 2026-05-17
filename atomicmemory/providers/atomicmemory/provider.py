@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -31,6 +31,7 @@ from atomicmemory.memory.types import (
     MemoryVersion,
     PackageFormat,
     PackageRequest,
+    Scope,
     SearchRequest,
     SearchResult,
     SearchResultPage,
@@ -129,7 +130,7 @@ class AtomicMemoryProvider(BaseMemoryProvider):
     def do_list(self, request: ListRequest) -> ListResultPage:
         offset = int(request.cursor) if request.cursor else 0
         limit = request.limit if request.limit is not None else 20
-        path = self._route(f"/memories/list?user_id={_qs(request.scope.user)}&limit={limit}&offset={offset}")
+        path = self._route(_build_list_path(request.scope, limit, offset))
         raw = fetch_json(self._require_client(), self._http_options, path)
         memories = [to_memory(m, request.scope) for m in raw.get("memories", [])]
         next_offset = offset + len(memories)
@@ -264,6 +265,8 @@ def _build_ingest_body(input: IngestInput) -> dict[str, Any]:
         "source_site": input.provenance.source if input.provenance and input.provenance.source else "sdk",
         "source_url": input.provenance.source_url if input.provenance and input.provenance.source_url else "",
     }
+    if input.scope.thread is not None:
+        body["session_id"] = input.scope.thread
     if input.mode == "verbatim":
         body["skip_extraction"] = True
         if input.metadata:
@@ -282,6 +285,8 @@ def _build_search_body(request: SearchRequest) -> dict[str, Any]:
         body["threshold"] = request.threshold
     if request.scope.namespace is not None:
         body["namespace_scope"] = request.scope.namespace
+    if request.scope.thread is not None:
+        body["session_id"] = request.scope.thread
     return body
 
 
@@ -298,3 +303,15 @@ def _build_package_body(request: PackageRequest) -> dict[str, Any]:
 def _qs(value: str | None) -> str:
     """URL-encode a query-string value; empty string when falsy."""
     return quote(value, safe="") if value else ""
+
+
+def _build_list_path(scope: Scope, limit: int, offset: int) -> str:
+    """Build the Core list path, including optional thread scope."""
+    pairs = [
+        ("user_id", scope.user or ""),
+        ("limit", str(limit)),
+        ("offset", str(offset)),
+    ]
+    if scope.thread is not None:
+        pairs.append(("session_id", scope.thread))
+    return f"/memories/list?{urlencode(pairs)}"

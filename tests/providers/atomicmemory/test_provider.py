@@ -9,6 +9,7 @@ import httpx
 import pytest
 import respx
 
+from atomicmemory.core.errors import ProviderError
 from atomicmemory.memory.types import (
     ListRequest,
     MemoryRef,
@@ -92,6 +93,32 @@ def test_ingest_verbatim_posts_quick_path_with_skip_extraction(
 
 
 @respx.mock
+def test_ingest_maps_thread_to_session_id(provider: AtomicMemoryProvider) -> None:
+    route = respx.post("http://core.test/v1/memories/ingest").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "episode_id": "ep-1",
+                "facts_extracted": 1,
+                "memories_stored": 1,
+                "memories_updated": 0,
+                "memories_deleted": 0,
+                "memories_skipped": 0,
+                "stored_memory_ids": ["m-1"],
+                "updated_memory_ids": [],
+                "links_created": 0,
+                "composites_created": 0,
+            },
+        )
+    )
+
+    provider.ingest(TextIngest(content="thread note", scope=Scope(user="u1", thread="thread-1")))
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["session_id"] == "thread-1"
+
+
+@respx.mock
 def test_search_posts_fast_path_and_maps_scores(provider: AtomicMemoryProvider) -> None:
     respx.post("http://core.test/v1/memories/search/fast").mock(
         return_value=httpx.Response(
@@ -120,6 +147,28 @@ def test_search_posts_fast_path_and_maps_scores(provider: AtomicMemoryProvider) 
     assert hit.similarity == 0.91
     assert hit.ranking_score == 0.88
     assert hit.relevance == 0.75
+
+
+@respx.mock
+def test_search_maps_thread_to_session_id(provider: AtomicMemoryProvider) -> None:
+    route = respx.post("http://core.test/v1/memories/search/fast").mock(
+        return_value=httpx.Response(200, json={"memories": [], "count": 0}),
+    )
+
+    provider.search(SearchRequest(query="q", scope=Scope(user="u1", thread="thread-1")))
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["session_id"] == "thread-1"
+
+
+@respx.mock
+def test_search_rejects_thread_scoped_rows_without_session_id(provider: AtomicMemoryProvider) -> None:
+    respx.post("http://core.test/v1/memories/search/fast").mock(
+        return_value=httpx.Response(200, json={"memories": [{"id": "m-1", "content": "x"}], "count": 1}),
+    )
+
+    with pytest.raises(ProviderError, match="session_id"):
+        provider.search(SearchRequest(query="q", scope=Scope(user="u1", thread="thread-1")))
 
 
 @respx.mock
@@ -156,6 +205,17 @@ def test_list_paginates_with_cursor(provider: AtomicMemoryProvider) -> None:
 
 
 @respx.mock
+def test_list_maps_thread_to_session_id(provider: AtomicMemoryProvider) -> None:
+    route = respx.get("http://core.test/v1/memories/list").mock(
+        return_value=httpx.Response(200, json={"memories": [], "count": 0}),
+    )
+
+    provider.list(ListRequest(scope=Scope(user="u1", thread="thread-1"), limit=10))
+
+    assert route.calls[0].request.url.params["session_id"] == "thread-1"
+
+
+@respx.mock
 def test_search_as_of_serializes_iso_datetime(provider: AtomicMemoryProvider) -> None:
     route = respx.post("http://core.test/v1/memories/search").mock(
         return_value=httpx.Response(200, json={"memories": []}),
@@ -166,6 +226,21 @@ def test_search_as_of_serializes_iso_datetime(provider: AtomicMemoryProvider) ->
 
     body = json.loads(route.calls[0].request.content)
     assert body["as_of"] == "2024-06-01T00:00:00+00:00"
+
+
+@respx.mock
+def test_search_as_of_maps_thread_to_session_id(provider: AtomicMemoryProvider) -> None:
+    route = respx.post("http://core.test/v1/memories/search").mock(
+        return_value=httpx.Response(200, json={"memories": []}),
+    )
+
+    provider.search_as_of(
+        SearchRequest(query="q", scope=Scope(user="u1", thread="thread-1")),
+        datetime(2024, 6, 1, tzinfo=timezone.utc),
+    )
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["session_id"] == "thread-1"
 
 
 @respx.mock
@@ -191,6 +266,21 @@ def test_package_returns_text_and_tokens(provider: AtomicMemoryProvider) -> None
     assert pkg.tokens == 7
     assert len(pkg.results) == 1
     assert pkg.budget_constrained is False
+
+
+@respx.mock
+def test_package_maps_thread_to_session_id(provider: AtomicMemoryProvider) -> None:
+    route = respx.post("http://core.test/v1/memories/search").mock(
+        return_value=httpx.Response(
+            200,
+            json={"memories": [], "injection_text": "", "estimated_context_tokens": 0, "budget_constrained": False},
+        )
+    )
+
+    provider.package(PackageRequest(query="q", scope=Scope(user="u1", thread="thread-1")))
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["session_id"] == "thread-1"
 
 
 @respx.mock

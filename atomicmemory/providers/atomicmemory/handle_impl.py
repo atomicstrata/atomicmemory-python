@@ -41,6 +41,7 @@ from atomicmemory.providers.atomicmemory.scope_mapper import (
     scope_to_fields,
     scope_to_query_pairs,
     strip_agent_scope,
+    strip_read_filters,
 )
 
 Route = Callable[[str], str]
@@ -97,7 +98,7 @@ class AtomicMemoryHandle:
             method="POST",
             json=body,
         )
-        echoed = strip_agent_scope(scope)
+        echoed = strip_read_filters(scope)
         return [_to_atomic_memory(m, echoed) for m in raw.get("memories", [])]
 
     def list(
@@ -107,7 +108,7 @@ class AtomicMemoryHandle:
     ) -> AtomicMemoryListResultPage:
         opts = _coerce_list_options(options)
         _assert_list_options_scope_compat(scope, opts)
-        pairs: list[tuple[str, str]] = scope_to_query_pairs(scope)
+        pairs: list[tuple[str, str]] = scope_to_query_pairs(scope, include_thread=True)
         if opts.limit is not None:
             pairs.append(("limit", str(opts.limit)))
         if opts.offset is not None:
@@ -131,14 +132,16 @@ class AtomicMemoryHandle:
         )
 
     def get(self, id: str, scope: MemoryScope) -> AtomicMemoryMemory | None:
-        path = self._route(f"/memories/{quote(id, safe='')}?{urlencode(scope_to_query_pairs(scope))}")
+        unfiltered_scope = strip_read_filters(scope)
+        path = self._route(f"/memories/{quote(id, safe='')}?{urlencode(scope_to_query_pairs(unfiltered_scope))}")
         raw = fetch_json_or_none(self._client, self._http, path)
         if raw is None:
             return None
-        return _to_atomic_memory(raw, strip_agent_scope(scope))
+        return _to_atomic_memory(raw, unfiltered_scope)
 
     def delete(self, id: str, scope: MemoryScope) -> None:
-        path = self._route(f"/memories/{quote(id, safe='')}?{urlencode(scope_to_query_pairs(scope))}")
+        unfiltered_scope = strip_read_filters(scope)
+        path = self._route(f"/memories/{quote(id, safe='')}?{urlencode(scope_to_query_pairs(unfiltered_scope))}")
         try:
             fetch_void(self._client, self._http, path, method="DELETE")
         except ProviderError as exc:
@@ -160,7 +163,7 @@ class AtomicMemoryHandle:
     ) -> AtomicMemoryIngestResult:
         assert_scope_allows_visibility(scope, input.visibility)
         body: dict[str, Any] = {
-            **scope_to_fields(scope),
+            **scope_to_fields(scope, include_thread=True),
             "conversation": input.conversation,
             "source_site": input.source_site,
             "source_url": input.source_url or "",
@@ -181,7 +184,7 @@ class AtomicMemoryHandle:
         scope: MemoryScope,
     ) -> AtomicMemorySearchResultPage:
         body: dict[str, Any] = {
-            **scope_to_fields(scope, include_agent_scope=True),
+            **scope_to_fields(scope, include_agent_scope=True, include_thread=True),
             "query": request.query,
         }
         if request.limit is not None:
@@ -263,7 +266,7 @@ def _to_atomic_memory(raw: dict[str, Any], scope: MemoryScope) -> AtomicMemoryMe
     payload: dict[str, Any] = {
         "id": raw["id"],
         "content": raw.get("content") or "",
-        "scope": scope,
+        "scope": _build_memory_scope(raw, scope),
         "created_at": _parse_iso(raw.get("created_at")) or _now_utc(),
     }
     if raw.get("updated_at"):
@@ -272,6 +275,23 @@ def _to_atomic_memory(raw: dict[str, Any], scope: MemoryScope) -> AtomicMemoryMe
         if raw.get(field) is not None:
             payload[field] = raw[field]
     return AtomicMemoryMemory.model_validate(payload)
+
+
+def _build_memory_scope(raw: dict[str, Any], requested_scope: MemoryScope) -> MemoryScope:
+    """Validate and project Core ``session_id`` back into namespace scope."""
+    session_id = raw.get("session_id")
+    if requested_scope.thread is not None:
+        if not session_id:
+            raise ValueError(
+                "atomicmemory provider: backend response missing required `session_id` for thread-scoped request"
+            )
+        if session_id != requested_scope.thread:
+            raise ValueError(
+                "atomicmemory provider: backend response `session_id` did not match requested thread scope"
+            )
+    if not session_id:
+        return requested_scope
+    return requested_scope.model_copy(update={"thread": session_id})
 
 
 def _to_atomic_search_result(raw: dict[str, Any], scope: MemoryScope) -> AtomicMemorySearchResult:

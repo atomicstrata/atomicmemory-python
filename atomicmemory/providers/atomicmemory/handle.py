@@ -35,6 +35,7 @@ class UserScope(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     kind: Literal["user"] = "user"
     user_id: str = Field(alias="userId")
+    thread: str | None = None
 
 
 class WorkspaceScope(BaseModel):
@@ -45,6 +46,7 @@ class WorkspaceScope(BaseModel):
     user_id: str = Field(alias="userId")
     workspace_id: str = Field(alias="workspaceId")
     agent_id: str = Field(alias="agentId")
+    thread: str | None = None
     agent_scope: AgentScope | None = Field(default=None, alias="agentScope")
 
 

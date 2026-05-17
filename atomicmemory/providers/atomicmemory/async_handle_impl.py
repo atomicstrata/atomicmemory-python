@@ -47,6 +47,7 @@ from atomicmemory.providers.atomicmemory.scope_mapper import (
     scope_to_fields,
     scope_to_query_pairs,
     strip_agent_scope,
+    strip_read_filters,
 )
 
 Route = Callable[[str], str]
@@ -93,7 +94,7 @@ class AsyncAtomicMemoryHandle:
             method="POST",
             json=body,
         )
-        echoed = strip_agent_scope(scope)
+        echoed = strip_read_filters(scope)
         return [_to_atomic_memory(m, echoed) for m in raw.get("memories", [])]
 
     async def list(
@@ -103,7 +104,7 @@ class AsyncAtomicMemoryHandle:
     ) -> AtomicMemoryListResultPage:
         opts = _coerce_list_options(options)
         _assert_list_options_scope_compat(scope, opts)
-        pairs: list[tuple[str, str]] = scope_to_query_pairs(scope)
+        pairs: list[tuple[str, str]] = scope_to_query_pairs(scope, include_thread=True)
         if opts.limit is not None:
             pairs.append(("limit", str(opts.limit)))
         if opts.offset is not None:
@@ -127,14 +128,16 @@ class AsyncAtomicMemoryHandle:
         )
 
     async def get(self, id: str, scope: MemoryScope) -> AtomicMemoryMemory | None:
-        path = self._route(f"/memories/{quote(id, safe='')}?{urlencode(scope_to_query_pairs(scope))}")
+        unfiltered_scope = strip_read_filters(scope)
+        path = self._route(f"/memories/{quote(id, safe='')}?{urlencode(scope_to_query_pairs(unfiltered_scope))}")
         raw = await afetch_json_or_none(self._client, self._http, path)
         if raw is None:
             return None
-        return _to_atomic_memory(raw, strip_agent_scope(scope))
+        return _to_atomic_memory(raw, unfiltered_scope)
 
     async def delete(self, id: str, scope: MemoryScope) -> None:
-        path = self._route(f"/memories/{quote(id, safe='')}?{urlencode(scope_to_query_pairs(scope))}")
+        unfiltered_scope = strip_read_filters(scope)
+        path = self._route(f"/memories/{quote(id, safe='')}?{urlencode(scope_to_query_pairs(unfiltered_scope))}")
         try:
             await afetch_void(self._client, self._http, path, method="DELETE")
         except ProviderError as exc:
@@ -152,7 +155,7 @@ class AsyncAtomicMemoryHandle:
     ) -> AtomicMemoryIngestResult:
         assert_scope_allows_visibility(scope, input.visibility)
         body: dict[str, Any] = {
-            **scope_to_fields(scope),
+            **scope_to_fields(scope, include_thread=True),
             "conversation": input.conversation,
             "source_site": input.source_site,
             "source_url": input.source_url or "",
@@ -173,7 +176,7 @@ class AsyncAtomicMemoryHandle:
         scope: MemoryScope,
     ) -> AtomicMemorySearchResultPage:
         body: dict[str, Any] = {
-            **scope_to_fields(scope, include_agent_scope=True),
+            **scope_to_fields(scope, include_agent_scope=True, include_thread=True),
             "query": request.query,
         }
         if request.limit is not None:

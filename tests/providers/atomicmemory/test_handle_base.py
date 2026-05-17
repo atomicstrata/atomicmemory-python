@@ -61,6 +61,22 @@ def test_ingest_full_workspace_includes_visibility(provider: AtomicMemoryProvide
     assert body["visibility"] == "restricted"
 
 
+@respx.mock
+def test_ingest_full_forwards_thread_as_session_id(provider: AtomicMemoryProvider) -> None:
+    route = respx.post("http://core.test/v1/memories/ingest").mock(
+        return_value=httpx.Response(200, json=_ingest_response())
+    )
+    handle = provider.get_extension("atomicmemory.base")
+    assert handle is not None
+    handle.ingest_full(
+        AtomicMemoryIngestInput(conversation="hi", source_site="chat"),
+        UserScope(user_id="u1", thread="thread-1"),
+    )
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["session_id"] == "thread-1"
+
+
 def test_ingest_user_scope_with_visibility_raises(provider: AtomicMemoryProvider) -> None:
     handle = provider.get_extension("atomicmemory.base")
     assert handle is not None
@@ -85,6 +101,43 @@ def test_search_includes_agent_scope_in_body(provider: AtomicMemoryProvider) -> 
 
     body = json.loads(route.calls[0].request.content)
     assert body["agent_scope"] == "self"
+
+
+@respx.mock
+def test_search_forwards_thread_and_maps_session_id(provider: AtomicMemoryProvider) -> None:
+    route = respx.post("http://core.test/v1/memories/search").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "count": 1,
+                "retrieval_mode": "flat",
+                "memories": [{"id": "m-1", "content": "x", "session_id": "thread-1"}],
+            },
+        )
+    )
+    handle = provider.get_extension("atomicmemory.base")
+    assert handle is not None
+
+    page = handle.search(AtomicMemorySearchRequest(query="q"), UserScope(user_id="u1", thread="thread-1"))
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["session_id"] == "thread-1"
+    assert page.results[0].memory.scope.thread == "thread-1"
+
+
+@respx.mock
+def test_search_rejects_thread_scoped_rows_without_session_id(provider: AtomicMemoryProvider) -> None:
+    respx.post("http://core.test/v1/memories/search").mock(
+        return_value=httpx.Response(
+            200,
+            json={"count": 1, "retrieval_mode": "flat", "memories": [{"id": "m-1", "content": "x"}]},
+        )
+    )
+    handle = provider.get_extension("atomicmemory.base")
+    assert handle is not None
+
+    with pytest.raises(ValueError, match="session_id"):
+        handle.search(AtomicMemorySearchRequest(query="q"), UserScope(user_id="u1", thread="thread-1"))
 
 
 @respx.mock
@@ -145,6 +198,21 @@ def test_expand_strips_agent_scope_on_returned_memories(
     assert memories[0].scope.agent_scope is None
 
 
+@respx.mock
+def test_expand_strips_thread_on_returned_memories(provider: AtomicMemoryProvider) -> None:
+    respx.post("http://core.test/v1/memories/expand").mock(
+        return_value=httpx.Response(
+            200,
+            json={"memories": [{"id": "m-1", "content": "a", "created_at": "2024-01-01T00:00:00Z"}]},
+        )
+    )
+    handle = provider.get_extension("atomicmemory.base")
+    assert handle is not None
+    memories = handle.expand(["m-1"], UserScope(user_id="u1", thread="thread-1"))
+
+    assert memories[0].scope.thread is None
+
+
 def test_list_rejects_workspace_with_source_site(provider: AtomicMemoryProvider) -> None:
     handle = provider.get_extension("atomicmemory.base")
     assert handle is not None
@@ -156,6 +224,22 @@ def test_list_rejects_workspace_with_source_site(provider: AtomicMemoryProvider)
 
 
 @respx.mock
+def test_list_forwards_thread_and_maps_session_id(provider: AtomicMemoryProvider) -> None:
+    route = respx.get("http://core.test/v1/memories/list").mock(
+        return_value=httpx.Response(
+            200,
+            json={"memories": [{"id": "m-1", "content": "a", "session_id": "thread-1"}], "count": 1},
+        )
+    )
+    handle = provider.get_extension("atomicmemory.base")
+    assert handle is not None
+    page = handle.list(UserScope(user_id="u1", thread="thread-1"))
+
+    assert route.calls[0].request.url.params["session_id"] == "thread-1"
+    assert page.memories[0].scope.thread == "thread-1"
+
+
+@respx.mock
 def test_get_returns_none_on_404_with_full_scope_echo(
     provider: AtomicMemoryProvider,
 ) -> None:
@@ -164,6 +248,20 @@ def test_get_returns_none_on_404_with_full_scope_echo(
     assert handle is not None
     result = handle.get("m-x", UserScope(user_id="u1"))
     assert result is None
+
+
+@respx.mock
+def test_get_omits_thread_filter(provider: AtomicMemoryProvider) -> None:
+    route = respx.get(url__regex=r"http://core.test/v1/memories/m-1.*").mock(
+        return_value=httpx.Response(200, json={"id": "m-1", "content": "a"})
+    )
+    handle = provider.get_extension("atomicmemory.base")
+    assert handle is not None
+    memory = handle.get("m-1", UserScope(user_id="u1", thread="thread-1"))
+
+    assert memory is not None
+    assert "session_id" not in route.calls[0].request.url.params
+    assert memory.scope.thread is None
 
 
 @respx.mock
