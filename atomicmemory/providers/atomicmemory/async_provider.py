@@ -55,6 +55,7 @@ from atomicmemory.providers.atomicmemory.mappers import (
 from atomicmemory.providers.atomicmemory.path import normalize_api_version
 from atomicmemory.providers.atomicmemory.provider import (
     _build_ingest_body,
+    _build_list_path,
     _build_package_body,
     _build_search_body,
     _qs,
@@ -137,7 +138,7 @@ class AsyncAtomicMemoryProvider(BaseAsyncMemoryProvider):
     async def do_list(self, request: ListRequest) -> ListResultPage:
         offset = int(request.cursor) if request.cursor else 0
         limit = request.limit if request.limit is not None else 20
-        path = self._route(f"/memories/list?user_id={_qs(request.scope.user)}&limit={limit}&offset={offset}")
+        path = self._route(_build_list_path(request.scope, limit, offset))
         raw = await afetch_json(self._require_client(), self._http_options, path)
         memories = [to_memory(m, request.scope) for m in raw.get("memories", [])]
         next_offset = offset + len(memories)

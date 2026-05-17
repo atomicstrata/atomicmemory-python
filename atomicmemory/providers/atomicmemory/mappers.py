@@ -51,11 +51,35 @@ def to_memory(raw: dict[str, Any], scope: Scope) -> Memory:
     return Memory(
         id=raw["id"],
         content=raw["content"],
-        scope=scope,
+        scope=_build_scope(raw, scope),
         created_at=created_at,
         provenance=_build_provenance(raw),
         metadata=_build_metadata(raw),
     )
+
+
+def _build_scope(raw: dict[str, Any], scope: Scope) -> Scope:
+    """Merge backend-projected scope fields and validate scoped reads."""
+    namespace = raw.get("namespace")
+    session_id = raw.get("session_id")
+    if scope.namespace is not None and namespace is not None and namespace != scope.namespace:
+        raise ValueError("atomicmemory provider: backend response `namespace` did not match requested namespace scope")
+    if scope.thread is not None:
+        if not session_id:
+            raise ValueError(
+                "atomicmemory provider: backend response missing required `session_id` for thread-scoped request"
+            )
+        if session_id != scope.thread:
+            raise ValueError(
+                "atomicmemory provider: backend response `session_id` did not match requested thread scope"
+            )
+
+    updates: dict[str, Any] = {}
+    if namespace:
+        updates["namespace"] = namespace
+    if session_id:
+        updates["thread"] = session_id
+    return scope.model_copy(update=updates)
 
 
 def _build_provenance(raw: dict[str, Any]) -> Provenance | None:

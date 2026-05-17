@@ -11,13 +11,14 @@ from __future__ import annotations
 from typing import Any
 
 from atomicmemory.core.errors import ValidationError
-from atomicmemory.providers.atomicmemory.handle import MemoryScope, WorkspaceScope
+from atomicmemory.providers.atomicmemory.handle import MemoryScope, UserScope, WorkspaceScope
 
 
 def scope_to_fields(
     scope: MemoryScope,
     *,
     include_agent_scope: bool = False,
+    include_thread: bool = False,
 ) -> dict[str, Any]:
     """Translate a `MemoryScope` to wire-format request fields.
 
@@ -26,6 +27,8 @@ def scope_to_fields(
         include_agent_scope: Emit ``agent_scope`` on the wire. Defaults
             to ``False``; only the search routes opt in (core ignores
             ``agent_scope`` on expand/list/get/delete).
+        include_thread: Emit ``session_id`` on routes Core honors:
+            ingest, search, and list.
 
     Returns:
         A dict with ``user_id`` always set, plus ``workspace_id`` /
@@ -33,21 +36,27 @@ def scope_to_fields(
         scopes.
     """
     if not isinstance(scope, WorkspaceScope):
-        return {"user_id": scope.user_id}
-    fields: dict[str, Any] = {
+        user_fields: dict[str, Any] = {"user_id": scope.user_id}
+        if include_thread and scope.thread is not None:
+            user_fields["session_id"] = scope.thread
+        return user_fields
+    workspace_fields: dict[str, Any] = {
         "user_id": scope.user_id,
         "workspace_id": scope.workspace_id,
         "agent_id": scope.agent_id,
     }
     if include_agent_scope and scope.agent_scope is not None:
-        fields["agent_scope"] = scope.agent_scope
-    return fields
+        workspace_fields["agent_scope"] = scope.agent_scope
+    if include_thread and scope.thread is not None:
+        workspace_fields["session_id"] = scope.thread
+    return workspace_fields
 
 
 def scope_to_query_pairs(
     scope: MemoryScope,
     *,
     include_agent_scope: bool = False,
+    include_thread: bool = False,
 ) -> list[tuple[str, str]]:
     """Translate a scope to ``[(key, value)]`` pairs for query strings.
 
@@ -66,6 +75,8 @@ def scope_to_query_pairs(
                 pairs.extend(("agent_scope", v) for v in value)
             else:
                 pairs.append(("agent_scope", value))
+    if include_thread and scope.thread is not None:
+        pairs.append(("session_id", scope.thread))
     return pairs
 
 
@@ -91,6 +102,18 @@ def strip_agent_scope(scope: MemoryScope) -> MemoryScope:
     """
     if not isinstance(scope, WorkspaceScope):
         return scope
+    return WorkspaceScope(
+        user_id=scope.user_id,
+        workspace_id=scope.workspace_id,
+        agent_id=scope.agent_id,
+        thread=scope.thread,
+    )
+
+
+def strip_read_filters(scope: MemoryScope) -> MemoryScope:
+    """Drop filters the target route did not apply before echoing scope."""
+    if not isinstance(scope, WorkspaceScope):
+        return UserScope(user_id=scope.user_id)
     return WorkspaceScope(
         user_id=scope.user_id,
         workspace_id=scope.workspace_id,

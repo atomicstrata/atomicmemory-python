@@ -53,6 +53,21 @@ def test_to_memory_includes_episode_id_in_metadata() -> None:
     assert memory.metadata == {"episode_id": "ep-1"}
 
 
+def test_to_memory_maps_session_id_to_thread_scope() -> None:
+    memory = to_memory({"id": "m1", "content": "hi", "session_id": "thread-1"}, _SCOPE)
+    assert memory.scope.thread == "thread-1"
+
+
+def test_to_memory_rejects_thread_scoped_row_without_session_id() -> None:
+    with pytest.raises(ValueError, match="session_id"):
+        to_memory({"id": "m1", "content": "hi"}, Scope(user="u1", thread="thread-1"))
+
+
+def test_to_memory_rejects_thread_scoped_row_with_mismatched_session_id() -> None:
+    with pytest.raises(ValueError, match="session_id"):
+        to_memory({"id": "m1", "content": "hi", "session_id": "thread-2"}, Scope(user="u1", thread="thread-1"))
+
+
 def test_to_search_result_prefers_semantic_similarity() -> None:
     raw = {"id": "m1", "content": "hi", "semantic_similarity": 0.9, "similarity": 0.5, "score": 0.7}
 
