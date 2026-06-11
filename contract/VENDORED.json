@@ -1,0 +1,8 @@
+{
+  "source_repo": "atomicmemory-internal",
+  "source_path": "packages/sdk/schema/v1 + packages/sdk/CONTRACT.md",
+  "source_sdk_version": "1.1.0",
+  "source_main_commit": "2a67871",
+  "schema_last_modified_commit": "6fccaf4",
+  "vendored_at": "2026-06-09"
+}

@@ -2,7 +2,7 @@
 
 Prereq:
   cd ../atomicmemory-core
-  npm run dev  # starts core on http://localhost:3050
+  npm run dev  # starts core on http://localhost:17350
 
 Then:
   uv run python examples/basic_ingest_search.py
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from atomicmemory import MemoryClient, MemoryRef, Scope, SearchRequest, TextIngest
 
-API_URL = "http://localhost:3050"
+API_URL = "http://localhost:17350"
 
 
 def main() -> None:

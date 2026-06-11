@@ -12,7 +12,7 @@ returns a `ProviderRegistration`.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -40,7 +40,7 @@ class AsyncProviderRegistration:
 
 
 SyncProviderFactory = Callable[[Any], ProviderRegistration]
-AsyncProviderFactory = Callable[[Any], AsyncProviderRegistration]
+AsyncProviderFactory = Callable[[Any], AsyncProviderRegistration | Awaitable[AsyncProviderRegistration]]
 
 
 class ProviderRegistry:

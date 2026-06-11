@@ -17,6 +17,7 @@ from atomicmemory.memory.types import (
     MemoryVersion,
     MemoryVersionEvent,
     Provenance,
+    RetrievalReceipt,
     Scope,
     SearchResult,
 )
@@ -118,7 +119,14 @@ def to_search_result(raw: dict[str, Any], scope: Scope) -> SearchResult:
         similarity=similarity,
         ranking_score=ranking_score,
         relevance=relevance,
+        version_id=raw.get("version_id"),
+        observed_at=raw.get("observed_at"),
     )
+
+
+def to_retrieval_receipt(raw: dict[str, Any]) -> RetrievalReceipt:
+    """Map the snake_case wire retrieval receipt to the SDK model."""
+    return RetrievalReceipt.model_validate(raw)
 
 
 def to_ingest_result(raw: dict[str, Any]) -> IngestResult:

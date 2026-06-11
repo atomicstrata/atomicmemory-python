@@ -9,6 +9,9 @@ provider.get_extension.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import inspect
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,6 +22,8 @@ from atomicmemory.memory.provider import (
     BaseMemoryProvider,
 )
 from atomicmemory.memory.registry import (
+    AsyncProviderFactory,
+    AsyncProviderRegistration,
     AsyncProviderRegistry,
     ProviderRegistry,
     default_async_registry,
@@ -36,6 +41,25 @@ from atomicmemory.memory.types import (
     SearchRequest,
     SearchResultPage,
 )
+
+
+async def _resolve_async_registration(factory: AsyncProviderFactory, config: Any) -> AsyncProviderRegistration:
+    """Invoke an async-registry factory, awaiting the result if it is awaitable.
+
+    Args:
+        factory: An async-registry factory; may return the registration
+            directly or an awaitable of it (lazy/async construction).
+        config: The provider-specific config object passed to the factory.
+
+    Returns:
+        The resolved ``AsyncProviderRegistration``.
+    """
+    registration = factory(config)
+    # Mypy strict narrows the registration|awaitable union on BOTH branches
+    # of isawaitable here, so no casts are needed to pin the return type.
+    if inspect.isawaitable(registration):
+        return await registration
+    return registration
 
 
 @dataclass
@@ -74,19 +98,58 @@ class MemoryService(_ServiceBase):
         self._pipelines: dict[str, MemoryProcessingPipeline] = {}
 
     def initialize(self, registry: ProviderRegistry | None = None) -> None:
+        """Initialize all configured providers atomically.
+
+        Registrations are staged locally and committed only after every
+        factory and provider ``initialize()`` succeeds, so a mid-loop failure
+        never leaves partially registered providers observable. On failure,
+        already-staged providers get a best-effort ``close()`` before the
+        original error re-raises.
+        """
         reg = registry if registry is not None else default_registry
-        for name, provider_config in self._config.provider_configs.items():
-            factory = reg.get(name)
-            if factory is None:
-                continue
-            registration = factory(provider_config)
-            self._providers[name] = registration.provider
-            self._pipelines[name] = registration.pipeline
-            registration.provider.initialize()
+        staged_providers: dict[str, BaseMemoryProvider] = {}
+        staged_pipelines: dict[str, MemoryProcessingPipeline] = {}
+        try:
+            for name, provider_config in self._config.provider_configs.items():
+                factory = reg.get(name)
+                if factory is None:
+                    continue
+                registration = factory(provider_config)
+                staged_providers[name] = registration.provider
+                staged_pipelines[name] = registration.pipeline
+                registration.provider.initialize()
+            if self._default_provider_name not in staged_providers:
+                raise ConfigError(f"Default provider '{self._default_provider_name}' has no factory in the registry")
+        except BaseException:
+            for provider in staged_providers.values():
+                with contextlib.suppress(Exception):
+                    provider.close()
+            raise
+        # REPLACE (don't update) so a close() → re-initialize with a different
+        # registry can never resurrect a previously-closed provider.
+        self._providers = staged_providers
+        self._pipelines = staged_pipelines
 
     def close(self) -> None:
-        for provider in self._providers.values():
-            provider.close()
+        """Close every provider best-effort, clear state, then re-raise the first failure.
+
+        Only the FIRST close failure is re-raised; failures from later
+        providers are suppressed after every provider has been given the
+        chance to close.
+        """
+        first_error: Exception | None = None
+        try:
+            for provider in self._providers.values():
+                try:
+                    provider.close()
+                except Exception as exc:
+                    if first_error is None:
+                        first_error = exc
+        finally:
+            self._providers = {}
+            self._pipelines = {}
+        if first_error is not None:
+            raise first_error
 
     def get_provider(self, name: str | None = None) -> BaseMemoryProvider:
         provider_name = name or self._default_provider_name
@@ -143,19 +206,57 @@ class AsyncMemoryService(_ServiceBase):
         self._pipelines: dict[str, MemoryProcessingPipeline] = {}
 
     async def initialize(self, registry: AsyncProviderRegistry | None = None) -> None:
+        """Initialize all configured providers atomically.
+
+        Factories may return the registration directly or an awaitable of it
+        (enabling lazy/async provider construction). Registrations are staged
+        and committed only on full success; on failure, staged providers get a
+        best-effort ``close()`` before the original error re-raises.
+        """
         reg = registry if registry is not None else default_async_registry
-        for name, provider_config in self._config.provider_configs.items():
-            factory = reg.get(name)
-            if factory is None:
-                continue
-            registration = factory(provider_config)
-            self._providers[name] = registration.provider
-            self._pipelines[name] = registration.pipeline
-            await registration.provider.initialize()
+        staged_providers: dict[str, BaseAsyncMemoryProvider] = {}
+        staged_pipelines: dict[str, MemoryProcessingPipeline] = {}
+        try:
+            for name, provider_config in self._config.provider_configs.items():
+                factory = reg.get(name)
+                if factory is None:
+                    continue
+                registration = await _resolve_async_registration(factory, provider_config)
+                staged_providers[name] = registration.provider
+                staged_pipelines[name] = registration.pipeline
+                await registration.provider.initialize()
+            if self._default_provider_name not in staged_providers:
+                raise ConfigError(f"Default provider '{self._default_provider_name}' has no factory in the registry")
+        except BaseException:
+            await asyncio.gather(
+                *(provider.close() for provider in staged_providers.values()),
+                return_exceptions=True,
+            )
+            raise
+        # REPLACE (don't update) — same stale-provider rationale as the sync service.
+        self._providers = staged_providers
+        self._pipelines = staged_pipelines
 
     async def close(self) -> None:
-        for provider in self._providers.values():
-            await provider.close()
+        """Close every provider best-effort, clear state, then re-raise the first failure.
+
+        Only the FIRST close failure is re-raised; failures from later
+        providers are suppressed after every provider has been given the
+        chance to close.
+        """
+        first_error: Exception | None = None
+        try:
+            for provider in self._providers.values():
+                try:
+                    await provider.close()
+                except Exception as exc:
+                    if first_error is None:
+                        first_error = exc
+        finally:
+            self._providers = {}
+            self._pipelines = {}
+        if first_error is not None:
+            raise first_error
 
     def get_provider(self, name: str | None = None) -> BaseAsyncMemoryProvider:
         provider_name = name or self._default_provider_name

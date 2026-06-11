@@ -5,11 +5,25 @@ provider interfaces; concrete providers live in
 `atomicmemory.providers`.
 """
 
+from atomicmemory.memory.capability_profiles import (
+    CapabilityGap,
+    CapabilityProfile,
+    capability_gaps,
+    satisfies_profile,
+)
 from atomicmemory.memory.filters import FieldFilter, FieldFilterOp, FilterExpr
+from atomicmemory.memory.meta_fact_filter import (
+    DEFAULT_META_FACT_PATTERNS,
+    MetaFactFilterConfig,
+    filter_meta_facts,
+    is_meta_fact,
+    resolve_meta_fact_patterns,
+)
 from atomicmemory.memory.types import (
     Capabilities,
     CapabilitiesExtensions,
     CapabilitiesRequiredScope,
+    ContentClass,
     ContextPackage,
     GraphEdge,
     GraphNode,
@@ -34,6 +48,7 @@ from atomicmemory.memory.types import (
     PackageRequest,
     Profile,
     Provenance,
+    RetrievalReceipt,
     Scope,
     SearchRequest,
     SearchResult,
@@ -43,9 +58,13 @@ from atomicmemory.memory.types import (
 )
 
 __all__ = [
+    "DEFAULT_META_FACT_PATTERNS",
     "Capabilities",
     "CapabilitiesExtensions",
     "CapabilitiesRequiredScope",
+    "CapabilityGap",
+    "CapabilityProfile",
+    "ContentClass",
     "ContextPackage",
     "FieldFilter",
     "FieldFilterOp",
@@ -69,14 +88,21 @@ __all__ = [
     "Message",
     "MessageIngest",
     "MessageRole",
+    "MetaFactFilterConfig",
     "PackageFormat",
     "PackageRequest",
     "Profile",
     "Provenance",
+    "RetrievalReceipt",
     "Scope",
     "SearchRequest",
     "SearchResult",
     "SearchResultPage",
     "TextIngest",
     "VerbatimIngest",
+    "capability_gaps",
+    "filter_meta_facts",
+    "is_meta_fact",
+    "resolve_meta_fact_patterns",
+    "satisfies_profile",
 ]
