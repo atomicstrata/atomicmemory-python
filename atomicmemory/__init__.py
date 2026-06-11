@@ -23,11 +23,25 @@ from atomicmemory.core.errors import (
     RateLimitError,
     ValidationError,
 )
+from atomicmemory.memory.capability_profiles import (
+    CapabilityGap,
+    CapabilityProfile,
+    capability_gaps,
+    satisfies_profile,
+)
 from atomicmemory.memory.filters import FieldFilter, FieldFilterOp, FilterExpr
+from atomicmemory.memory.meta_fact_filter import (
+    DEFAULT_META_FACT_PATTERNS,
+    MetaFactFilterConfig,
+    filter_meta_facts,
+    is_meta_fact,
+    resolve_meta_fact_patterns,
+)
 from atomicmemory.memory.types import (
     Capabilities,
     CapabilitiesExtensions,
     CapabilitiesRequiredScope,
+    ContentClass,
     ContextPackage,
     GraphEdge,
     GraphNode,
@@ -52,6 +66,7 @@ from atomicmemory.memory.types import (
     PackageRequest,
     Profile,
     Provenance,
+    RetrievalReceipt,
     Scope,
     SearchRequest,
     SearchResult,
@@ -87,6 +102,7 @@ from atomicmemory.storage import (
 )
 
 __all__ = [
+    "DEFAULT_META_FACT_PATTERNS",
     "ArtifactHead",
     "ArtifactInUseError",
     "ArtifactMetadata",
@@ -103,7 +119,10 @@ __all__ = [
     "Capabilities",
     "CapabilitiesExtensions",
     "CapabilitiesRequiredScope",
+    "CapabilityGap",
+    "CapabilityProfile",
     "ConfigError",
+    "ContentClass",
     "ContextPackage",
     "DeleteArtifactOptions",
     "DeleteArtifactPolicy",
@@ -133,6 +152,7 @@ __all__ = [
     "Message",
     "MessageIngest",
     "MessageRole",
+    "MetaFactFilterConfig",
     "NetworkError",
     "NotInitializedError",
     "PackageFormat",
@@ -146,6 +166,7 @@ __all__ = [
     "PutManagedInput",
     "PutPointerInput",
     "RateLimitError",
+    "RetrievalReceipt",
     "Scope",
     "SearchRequest",
     "SearchResult",
@@ -163,4 +184,9 @@ __all__ = [
     "VerificationResult",
     "VerifyArtifactOptions",
     "__version__",
+    "capability_gaps",
+    "filter_meta_facts",
+    "is_meta_fact",
+    "resolve_meta_fact_patterns",
+    "satisfies_profile",
 ]

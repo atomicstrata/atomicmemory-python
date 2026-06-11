@@ -14,6 +14,7 @@ from urllib.parse import quote, urlencode
 import httpx
 
 from atomicmemory.core.errors import ProviderError
+from atomicmemory.memory.meta_fact_filter import filter_meta_facts
 from atomicmemory.memory.provider import BaseMemoryProvider
 from atomicmemory.memory.types import (
     Capabilities,
@@ -49,6 +50,7 @@ from atomicmemory.providers.atomicmemory.mappers import (
     to_ingest_result,
     to_memory,
     to_memory_version,
+    to_retrieval_receipt,
     to_search_result,
 )
 from atomicmemory.providers.atomicmemory.path import normalize_api_version
@@ -103,6 +105,13 @@ class AtomicMemoryProvider(BaseMemoryProvider):
         raw = fetch_json(self._require_client(), self._http_options, path, method="POST", json=body)
         return to_ingest_result(raw)
 
+    def _apply_meta_fact_filter(self, results: list[SearchResult]) -> list[SearchResult]:
+        """Drop meta-facts when the opt-in filter is enabled; otherwise pass through."""
+        config = self._config.meta_fact_filter
+        if config is None or not config.enabled:
+            return results
+        return filter_meta_facts(results, lambda result: result.memory.content, config)
+
     def do_search(self, request: SearchRequest) -> SearchResultPage:
         body = _build_search_body(request)
         raw = fetch_json(
@@ -113,7 +122,8 @@ class AtomicMemoryProvider(BaseMemoryProvider):
             json=body,
         )
         return SearchResultPage(
-            results=[to_search_result(m, request.scope) for m in raw.get("memories", [])],
+            results=self._apply_meta_fact_filter([to_search_result(m, request.scope) for m in raw.get("memories", [])]),
+            retrieval=to_retrieval_receipt(raw["retrieval"]) if raw.get("retrieval") else None,
         )
 
     def do_get(self, ref: MemoryRef) -> Memory | None:
@@ -185,7 +195,9 @@ class AtomicMemoryProvider(BaseMemoryProvider):
             method="POST",
             json=body,
         )
-        results: list[SearchResult] = [to_search_result(m, request.scope) for m in raw.get("memories", [])]
+        results: list[SearchResult] = self._apply_meta_fact_filter(
+            [to_search_result(m, request.scope) for m in raw.get("memories", [])]
+        )
         budget_constrained = raw.get("budget_constrained")
         if not isinstance(budget_constrained, bool):
             raise ValueError(
@@ -209,7 +221,8 @@ class AtomicMemoryProvider(BaseMemoryProvider):
             json=body,
         )
         return SearchResultPage(
-            results=[to_search_result(m, request.scope) for m in raw.get("memories", [])],
+            results=self._apply_meta_fact_filter([to_search_result(m, request.scope) for m in raw.get("memories", [])]),
+            retrieval=to_retrieval_receipt(raw["retrieval"]) if raw.get("retrieval") else None,
         )
 
     def history(self, ref: MemoryRef) -> list[MemoryVersion]:
@@ -271,6 +284,12 @@ def _build_ingest_body(input: IngestInput) -> dict[str, Any]:
         body["skip_extraction"] = True
         if input.metadata:
             body["metadata"] = input.metadata
+    # Forward the caller-chosen sensitivity class for every mode (text / messages /
+    # verbatim): a RAW_CONTENT_POLICY=reject core gates ingest on content_class
+    # regardless of mode. Never defaulted — omitting it fails closed rather than
+    # the SDK labeling raw content as safe on the caller's behalf.
+    if input.content_class is not None:
+        body["content_class"] = input.content_class
     return body
 
 

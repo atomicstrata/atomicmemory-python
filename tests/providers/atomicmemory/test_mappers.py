@@ -11,6 +11,7 @@ from atomicmemory.providers.atomicmemory.mappers import (
     to_ingest_result,
     to_memory,
     to_memory_version,
+    to_retrieval_receipt,
     to_search_result,
 )
 
@@ -136,3 +137,44 @@ def test_to_memory_version_normalizes_unknown_event() -> None:
 def test_to_memory_version_requires_created_at() -> None:
     with pytest.raises(ValueError, match="created_at"):
         to_memory_version({"id": "v1", "content": "hi"})
+
+
+def test_to_search_result_surfaces_version_id_and_observed_at() -> None:
+    result = to_search_result(
+        {
+            "id": "m1",
+            "content": "hi",
+            "score": 0.5,
+            "version_id": "v7",
+            "observed_at": "2026-05-20T10:00:00.000Z",
+        },
+        _SCOPE,
+    )
+
+    assert result.version_id == "v7"
+    assert result.observed_at == "2026-05-20T10:00:00.000Z"
+
+
+def test_to_search_result_omits_receipt_fields_when_absent() -> None:
+    result = to_search_result({"id": "m2", "content": "hi", "score": 0.1}, _SCOPE)
+
+    assert result.version_id is None
+    assert result.observed_at is None
+
+
+def test_to_retrieval_receipt_maps_wire_shape() -> None:
+    receipt = to_retrieval_receipt(
+        {
+            "embedding_provider": "voyage",
+            "embedding_model": "voyage-3",
+            "embedding_model_version": "1",
+            "embedding_dimensions": 1024,
+            "query_text": "q",
+            "candidate_ids": ["m1", "m2"],
+            "trace_id": "t1",
+        }
+    )
+
+    assert receipt.embedding_model == "voyage-3"
+    assert receipt.candidate_ids == ["m1", "m2"]
+    assert receipt.trace_id == "t1"

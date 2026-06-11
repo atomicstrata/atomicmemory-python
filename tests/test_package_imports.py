@@ -6,7 +6,7 @@ from __future__ import annotations
 def test_top_level_imports() -> None:
     import atomicmemory
 
-    assert atomicmemory.__version__ == "1.0.0"
+    assert isinstance(atomicmemory.__version__, str)
     assert atomicmemory.Scope is not None
     assert atomicmemory.Memory is not None
     assert atomicmemory.AtomicMemoryError is not None

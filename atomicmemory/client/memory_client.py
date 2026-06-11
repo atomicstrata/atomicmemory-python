@@ -9,6 +9,7 @@ code. Async users get the same surface via
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any
@@ -127,7 +128,7 @@ class MemoryClient:
     """Sync entry point for the V3 memory API.
 
     Example:
-        >>> with MemoryClient(providers={"atomicmemory": {"api_url": "http://localhost:3050"}}) as memory:
+        >>> with MemoryClient(providers={"atomicmemory": {"api_url": "http://localhost:17350"}}) as memory:
         ...     memory.initialize()
         ...     memory.ingest({"mode": "text", "content": "hi", "scope": {"user": "u1"}})
     """
@@ -151,24 +152,54 @@ class MemoryClient:
             )
         )
         self._initialized = False
+        self._init_lock = threading.Lock()
+        self._init_error: Exception | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def initialize(self, registry: ProviderRegistry | None = None) -> None:
-        """Initialize all configured providers. Idempotent."""
-        if self._initialized:
-            return
-        self._service.initialize(registry if registry is not None else default_registry)
-        self._initialized = True
+        """Initialize all configured providers. Idempotent and thread-safe.
+
+        Concurrent and subsequent calls share a single initialization run
+        (the first call's ``registry`` wins; later arguments are ignored).
+        A FAILED initialization is sticky: retrying re-raises the original
+        error — resolve the cause and construct a new client. A successful
+        lifecycle stays re-openable: ``close()`` returns the client to the
+        uninitialized state. Factories must not call back into this client
+        instance; the non-reentrant lock would deadlock.
+        """
+        with self._init_lock:
+            if self._initialized:
+                return
+            if self._init_error is not None:
+                raise self._init_error
+            try:
+                self._service.initialize(registry if registry is not None else default_registry)
+            except Exception as exc:
+                # Sticky failures are real initialization errors ONLY —
+                # KeyboardInterrupt/SystemExit propagate without poisoning the client.
+                self._init_error = exc
+                raise
+            self._initialized = True
 
     def close(self) -> None:
-        """Close every initialized provider; safe to call multiple times."""
-        if not self._initialized:
-            return
-        self._service.close()
-        self._initialized = False
+        """Close every initialized provider; safe to call multiple times.
+
+        A pending sync initialize holds the lock, so close() blocks until
+        initialization finishes, including any network I/O it performs —
+        deterministic by construction. A client that never initialized
+        successfully is unaffected: close() is a no-op and the sticky
+        initialization error is preserved — construct a new client.
+        """
+        with self._init_lock:
+            if not self._initialized:
+                return
+            try:
+                self._service.close()
+            finally:
+                self._initialized = False
 
     def __enter__(self) -> MemoryClient:
         return self

@@ -53,3 +53,9 @@ Thumbs.db
 *.log
 .env
 .env.local
+
+# Internal planning hub (specs/plans) — not published
+localdocs/
+
+# Local review/feature worktrees
+.worktrees/

@@ -32,13 +32,13 @@ pip install 'atomicmemory[embeddings]'      # + sentence-transformers for local 
 
 ## Quick start
 
-Prerequisite: start `atomicmemory-core` first. Follow the [Core Quickstart](https://docs.atomicstrata.ai/quickstart) if you do not already have a backend at `http://localhost:3050`.
+Prerequisite: start `atomicmemory-core` first. Follow the [Core Quickstart](https://docs.atomicstrata.ai/quickstart) if you do not already have a backend at `http://localhost:17350`.
 
 ```python
 from atomicmemory import AtomicMemoryClient
 
 with AtomicMemoryClient({
-    "apiUrl": "http://localhost:3050",
+    "apiUrl": "http://localhost:17350",
     "apiKey": "server-api-key",
     "userId": "demo",
 }) as client:
@@ -72,7 +72,7 @@ from atomicmemory import AsyncAtomicMemoryClient
 
 async def main() -> None:
     async with AsyncAtomicMemoryClient({
-        "apiUrl": "http://localhost:3050",
+        "apiUrl": "http://localhost:17350",
         "apiKey": "server-api-key",
         "userId": "demo",
     }) as client:
@@ -130,6 +130,50 @@ The `client.storage` namespace mirrors the TypeScript SDK's direct storage API:
 - `stream_content` streams large artifact bodies without buffering the entire response in memory.
 
 Every storage request sends `Authorization: Bearer <apiKey>` and `X-AtomicMemory-User-Id`. The SDK never sends the legacy `?user_id=` URL parameter.
+
+## v1 wire contract
+
+`atomicmemory.contract.v1` is the wire codec for the v1 provider-contract encoding. The wire form is deliberately mixed-case — `Memory.createdAt`/`updatedAt` and `SearchResult.rankingScore` are camelCase; `version_id`, `observed_at`, and retrieval-receipt fields are snake_case — as pinned by the vendored `contract/CONTRACT.md`. This module is the only place that mapping lives; in-process models and provider mappers are unchanged.
+
+```python
+from atomicmemory.contract import v1
+
+# decode a wire search response (e.g. from a cross-SDK provider call)
+wire_page = {
+    "results": [
+        {
+            "memory": {
+                "id": "mem_1",
+                "content": "I prefer aisle seats on flights.",
+                "scope": {"user": "demo"},
+                "kind": "fact",
+                "createdAt": "2026-05-30T12:00:00.000Z",
+            },
+            "score": 0.91,
+            "rankingScore": 0.87,
+        }
+    ],
+    "retrieval": {
+        "embedding_model": "text-embedding-x",
+        "embedding_model_version": "1",
+        "embedding_dimensions": 1536,
+        "query_text": "deploy gate",
+        "candidate_ids": ["mem_1"],
+        "trace_id": "trace-1",
+    },
+}
+
+page = v1.decode_search_result_page(wire_page)
+for hit in page.results:
+    print(hit.memory.content, hit.score)  # snake_case in-process models
+
+# re-encode to the exact v1 wire form (millisecond-precision UTC datetimes)
+wire_out = v1.encode_search_result_page(page)
+```
+
+Two behaviors to know: naive datetimes passed to encode functions are assumed UTC (bare `astimezone()` would shift by the host's UTC offset); `encode_ingest_input` rejects models carrying `content_class` with a clear error because the v1 schemas have `additionalProperties: false` and no such field — this is a Python-ahead field pending TS contract alignment.
+
+This is NOT the AtomicMemory core HTTP API. That boundary stays in the provider mappers. The import path is `atomicmemory.contract` — deliberately not re-exported from the package root to keep the root namespace focused on the core provider API.
 
 ## Development
 

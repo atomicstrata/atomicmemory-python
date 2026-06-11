@@ -25,6 +25,16 @@ from atomicmemory.memory.filters import FieldFilterOp, FilterExpr
 
 MessageRole = Literal["user", "assistant", "system", "tool"]
 MemoryKind = Literal["fact", "episode", "summary", "procedure", "document"]
+ContentClass = Literal["summary", "redacted", "raw"]
+"""Sensitivity class for ingested content (any mode), mirroring core's ``content_class``.
+
+``summary`` (distilled, hosted-safe), ``redacted`` (sensitive spans removed by the
+caller), or ``raw`` (verbatim prompt/response/diff/transcript). Honored by core
+only on the verbatim path; under the default ``RAW_CONTENT_POLICY=reject`` it
+rejects ``raw`` (and unclassified) content. The SDK never infers this — the caller
+chooses it — so omitting it (or choosing ``raw``) fails closed rather than
+mislabeling raw content as safe.
+"""
 MemoryVersionEvent = Literal["created", "updated", "superseded", "invalidated"]
 PackageFormat = Literal["flat", "tiered", "structured"]
 IngestMode = Literal["text", "messages", "verbatim"]
@@ -93,6 +103,13 @@ class IngestBase(BaseModel):
     scope: Scope
     provenance: Provenance | None = None
     metadata: dict[str, Any] | None = None
+    content_class: ContentClass | None = None
+    """Sensitivity class stamped on the ingested content. Applies to every mode:
+    a core running the default ``RAW_CONTENT_POLICY=reject`` refuses content that
+    is ``"raw"`` or carries no ``content_class`` at all (treated as raw), so
+    extraction (``text``/``messages``) and ``verbatim`` ingests alike must stamp
+    ``"summary"`` or ``"redacted"`` to be accepted. Omitted against an ``allow``
+    core, ingest proceeds unstamped."""
 
 
 class TextIngest(IngestBase):
@@ -180,6 +197,29 @@ class SearchResult(BaseModel):
     similarity: float | None = None
     ranking_score: float | None = None
     relevance: float | None = None
+    # Per-result retrieval-receipt fields (replay pinning). ``version_id`` is
+    # None when the memory is unversioned; ``observed_at`` is ISO-8601.
+    version_id: str | None = None
+    observed_at: str | None = None
+
+
+class RetrievalReceipt(BaseModel):
+    """Audit-grade retrieval receipt.
+
+    Pins the embedding model and the ranked candidate set so a search can be
+    replayed bit-for-bit. Present when the provider emits one (AtomicMemory
+    always does on search).
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    embedding_provider: str | None = None
+    embedding_model: str
+    embedding_model_version: str
+    embedding_dimensions: int
+    query_text: str
+    candidate_ids: list[str] = Field(default_factory=list)
+    trace_id: str
 
 
 class SearchResultPage(BaseModel):
@@ -189,6 +229,8 @@ class SearchResultPage(BaseModel):
 
     results: list[SearchResult] = Field(default_factory=list)
     cursor: str | None = None
+    # Audit-grade retrieval receipt for this search, when the provider emits one.
+    retrieval: RetrievalReceipt | None = None
 
 
 # ---------------------------------------------------------------------------

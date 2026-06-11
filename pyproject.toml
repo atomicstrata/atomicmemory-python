@@ -1,6 +1,6 @@
 [project]
 name = "atomicmemory"
-version = "1.0.1"
+version = "1.1.0"
 description = "Python client SDK for AtomicMemory memory and artifact storage."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,6 +36,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
     "vulture>=2.11",
+    "jsonschema[format]>=4.21",  # 4.21+: stable referencing/Registry API + format extras
 ]
 
 [project.urls]
@@ -56,6 +57,7 @@ packages = ["atomicmemory"]
 [tool.hatch.build.targets.sdist]
 include = [
     "atomicmemory",
+    "contract",
     "examples",
     "tests",
     "CHANGELOG.md",

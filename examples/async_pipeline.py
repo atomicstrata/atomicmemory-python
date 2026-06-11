@@ -6,7 +6,7 @@ import asyncio
 
 from atomicmemory import AsyncMemoryClient, Scope, SearchRequest, TextIngest
 
-API_URL = "http://localhost:3050"
+API_URL = "http://localhost:17350"
 
 
 async def main() -> None:
