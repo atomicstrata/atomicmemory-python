@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 StorageArtifactStatus = Literal[
     "stored",
@@ -39,7 +39,7 @@ class StorageClientConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     api_url: str = Field(alias="apiUrl")
-    api_key: str = Field(alias="apiKey")
+    api_key: SecretStr = Field(alias="apiKey")
     user_id: str = Field(alias="userId")
     timeout_seconds: float = Field(default=30.0, alias="timeoutSeconds")
 
@@ -52,9 +52,19 @@ class StorageClientConfig(BaseModel):
             raise ValueError("api_url must be an http(s) URL")
         return stripped
 
-    @field_validator("api_key", "user_id")
+    @field_validator("api_key", mode="before")
     @classmethod
-    def _validate_non_empty_secret(cls, value: str) -> str:
+    def _validate_api_key(cls, value: object) -> object:
+        # Validate before SecretStr wraps the value so we can call .strip().
+        if isinstance(value, str) and value.strip() == "":
+            raise ValueError("value must not be empty")
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("user_id")
+    @classmethod
+    def _validate_user_id(cls, value: str) -> str:
         stripped = value.strip()
         if stripped == "":
             raise ValueError("value must not be empty")
@@ -71,8 +81,7 @@ class StorageClientConfig(BaseModel):
     def _require_non_empty(self) -> StorageClientConfig:
         if not self.api_url:
             raise ValueError("api_url is required")
-        if not self.api_key:
-            raise ValueError("api_key is required")
+        # api_key is always truthy as SecretStr; empty string rejected by _validate_api_key above.
         if not self.user_id:
             raise ValueError("user_id is required")
         return self

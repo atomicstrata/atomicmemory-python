@@ -196,7 +196,7 @@ class AsyncStorageClient:
 
     def _headers(self, extra: dict[str, str] | None) -> dict[str, str]:
         headers = {
-            "Authorization": f"Bearer {self._config.api_key}",
+            "Authorization": f"Bearer {self._config.api_key.get_secret_value()}",
             "X-AtomicMemory-User-Id": self._config.user_id,
         }
         if extra:

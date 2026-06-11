@@ -21,7 +21,7 @@ This is a Python port of the TypeScript [`atomicmemory-sdk`](https://github.com/
 
 ## Status
 
-Stable release — `1.0.0` on [PyPI](https://pypi.org/project/atomicmemory/).
+Stable release — `1.1.0` on [PyPI](https://pypi.org/project/atomicmemory/); `1.2.0` staged on main.
 
 ## Installation
 
@@ -130,6 +130,64 @@ The `client.storage` namespace mirrors the TypeScript SDK's direct storage API:
 - `stream_content` streams large artifact bodies without buffering the entire response in memory.
 
 Every storage request sends `Authorization: Bearer <apiKey>` and `X-AtomicMemory-User-Id`. The SDK never sends the legacy `?user_id=` URL parameter.
+
+
+## Entities
+
+The `client.entities` namespace (on `AtomicMemoryClient` and `AsyncAtomicMemoryClient`) provides typed access to the `/v1/entities` API — profiles, attributes, memory history, settings, and entity merge.
+
+```python
+from atomicmemory import AtomicMemoryClient
+
+with AtomicMemoryClient({
+    "apiUrl": "http://localhost:17350",
+    "apiKey": "server-api-key",
+    "userId": "demo",
+}) as client:
+    # fetch the synthesized profile for a user
+    profile = client.entities.profile("alice")
+    print(profile.entity_id, profile.summary)
+
+    # list all entities (paginated)
+    result = client.entities.list(page=1, page_size=20)
+    for entity in result.entities:
+        print(entity.entity_id, entity.memory_count)
+```
+
+The async surface is identical — call `await client.entities.profile("alice")` on `AsyncAtomicMemoryClient`.
+
+## Memory pipelines
+
+`MemoryProcessingPipeline` (and its async twin `AsyncMemoryProcessingPipeline`) let you attach optional pre- and post-processing hooks to any registered provider. All hook fields are `None` by default, so a pipeline with only one hook populated is valid.
+
+```python
+from atomicmemory import AtomicMemoryClient
+from atomicmemory.memory.pipeline import MemoryProcessingPipeline
+from atomicmemory.memory.registry import ProviderRegistration, default_registry
+
+def split_long_content(input):
+    # return a list of IngestInput items; here we pass through unchanged
+    return [input]
+
+def log_ingest_result(result, original_input):
+    print(f"ingested: {len(result.created)} created, {len(result.updated)} updated")
+
+pipeline = MemoryProcessingPipeline(
+    preprocess_ingest=split_long_content,   # optional — splits one input into many
+    postprocess_ingest=log_ingest_result,   # optional — runs after each per-item ingest
+)
+
+# Register the pipeline alongside a provider factory
+def my_provider_factory(config):
+    from atomicmemory.memory.provider import BaseMemoryProvider
+    # ... build and return your provider ...
+    provider = ...
+    return ProviderRegistration(provider=provider, pipeline=pipeline)
+
+default_registry.register("my_provider", my_provider_factory)
+```
+
+If `preprocess_ingest` splits one input into N items and a per-item ingest raises mid-loop, earlier items are already persisted and no merged result is returned — keep splitting pipelines idempotent.
 
 ## v1 wire contract
 

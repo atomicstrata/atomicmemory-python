@@ -94,6 +94,39 @@ class NetworkError(AtomicMemoryError):
         self.__cause__ = cause
 
 
+class UnsupportedOperationError(ProviderError):
+    """TS-parity: raised when a provider lacks a requested extension/operation.
+
+    Non-breaking subclass of ``ProviderError`` — existing ``except ProviderError``
+    handlers keep catching this error unchanged.
+    """
+
+    def __init__(self, provider: str, operation: str) -> None:
+        super().__init__(
+            f"{provider} does not support {operation}",
+            provider=provider,
+            context={"operation": operation},
+        )
+        self.operation = operation
+
+
+class InvalidScopeError(ValidationError):
+    """TS-parity: raised when an operation's required scope fields are absent.
+
+    Non-breaking subclass of ``ValidationError`` — existing ``except ValidationError``
+    handlers keep catching this error unchanged. ``context["missing"]`` preserves
+    the list of absent field names (asserted by existing test_provider_base tests).
+    """
+
+    def __init__(self, provider: str, missing: list[str], operation: str) -> None:
+        super().__init__(
+            f"{provider} requires scope fields: {', '.join(missing)}",
+            context={"provider": provider, "missing": list(missing), "operation": operation},
+        )
+        self.missing = missing
+        self.operation = operation
+
+
 class RateLimitError(ProviderError):
     """The backend returned HTTP 429 (rate limited).
 

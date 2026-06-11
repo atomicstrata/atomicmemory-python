@@ -15,8 +15,13 @@ import inspect
 from dataclasses import dataclass
 from typing import Any
 
-from atomicmemory.core.errors import ConfigError, ProviderError
-from atomicmemory.memory.pipeline import NOOP_PIPELINE, MemoryProcessingPipeline
+from atomicmemory.core.errors import ConfigError, UnsupportedOperationError
+from atomicmemory.memory.pipeline import (
+    NOOP_ASYNC_PIPELINE,
+    NOOP_PIPELINE,
+    AsyncMemoryProcessingPipeline,
+    MemoryProcessingPipeline,
+)
 from atomicmemory.memory.provider import (
     BaseAsyncMemoryProvider,
     BaseMemoryProvider,
@@ -41,6 +46,15 @@ from atomicmemory.memory.types import (
     SearchRequest,
     SearchResultPage,
 )
+
+
+def _merge_ingest_results(results: list[IngestResult]) -> IngestResult:
+    """Concatenate per-item ingest results in input order (mirrors TS mergeIngestResults)."""
+    return IngestResult(
+        created=[m for r in results for m in r.created],
+        updated=[m for r in results for m in r.updated],
+        unchanged=[m for r in results for m in r.unchanged],
+    )
 
 
 async def _resolve_async_registration(factory: AsyncProviderFactory, config: Any) -> AsyncProviderRegistration:
@@ -162,34 +176,73 @@ class MemoryService(_ServiceBase):
         return sorted(self._providers.keys())
 
     def ingest(self, input: IngestInput, provider_name: str | None = None) -> IngestResult:
+        """Ingest through the provider's pipeline.
+
+        ``preprocess_ingest`` may split one input into many; each per-item
+        result passes through ``postprocess_ingest``; the merged result
+        concatenates ``created``/``updated``/``unchanged`` in input order.
+        If a per-item ingest raises mid-split, earlier items remain persisted
+        and no merged result is returned, so splitting pipelines should be idempotent.
+        """
         provider = self.get_provider(provider_name)
-        return provider.ingest(input)
+        pipeline = self._pipeline(provider_name)
+        if pipeline.preprocess_ingest is not None:
+            results: list[IngestResult] = []
+            for item in pipeline.preprocess_ingest(input):
+                result = provider.ingest(item)
+                if pipeline.postprocess_ingest is not None:
+                    pipeline.postprocess_ingest(result, item)
+                results.append(result)
+            return _merge_ingest_results(results)
+        result = provider.ingest(input)
+        if pipeline.postprocess_ingest is not None:
+            pipeline.postprocess_ingest(result, input)
+        return result
 
     def search(self, request: SearchRequest, provider_name: str | None = None) -> SearchResultPage:
+        """Search through the provider's pipeline.
+
+        The PROCESSED request (after ``preprocess_search``) flows to both the
+        provider and ``postprocess_search`` — never the original.
+        """
         provider = self.get_provider(provider_name)
-        return provider.search(request)
+        pipeline = self._pipeline(provider_name)
+        processed = pipeline.preprocess_search(request) if pipeline.preprocess_search is not None else request
+        page = provider.search(processed)
+        return pipeline.postprocess_search(page, processed) if pipeline.postprocess_search is not None else page
 
     def get(self, ref: MemoryRef, provider_name: str | None = None) -> Memory | None:
+        """Get through the provider's pipeline.
+
+        The PROCESSED ref (after ``preprocess_get``) flows to both the
+        provider and ``postprocess_get`` — never the original.
+        """
         provider = self.get_provider(provider_name)
-        return provider.get(ref)
+        pipeline = self._pipeline(provider_name)
+        processed = pipeline.preprocess_get(ref) if pipeline.preprocess_get is not None else ref
+        memory = provider.get(processed)
+        return pipeline.postprocess_get(memory, processed) if pipeline.postprocess_get is not None else memory
 
     def delete(self, ref: MemoryRef, provider_name: str | None = None) -> None:
         provider = self.get_provider(provider_name)
         provider.delete(ref)
 
     def list(self, request: ListRequest, provider_name: str | None = None) -> ListResultPage:
+        """List through the provider's pipeline.
+
+        Post-only: there is no list preprocess; the provider receives the
+        ORIGINAL request, which also flows to ``postprocess_list``.
+        """
         provider = self.get_provider(provider_name)
-        return provider.list(request)
+        pipeline = self._pipeline(provider_name)
+        page = provider.list(request)
+        return pipeline.postprocess_list(page, request) if pipeline.postprocess_list is not None else page
 
     def package(self, request: PackageRequest, provider_name: str | None = None) -> ContextPackage:
         provider = self.get_provider(provider_name)
         packager = provider.get_extension("package")
         if packager is None or not hasattr(packager, "package"):
-            raise ProviderError(
-                f"Provider '{provider.name}' does not support the 'package' extension",
-                provider=provider.name,
-                context={"operation": "package"},
-            )
+            raise UnsupportedOperationError(provider=provider.name, operation="package")
         return packager.package(request)  # type: ignore[no-any-return]
 
     def _pipeline(self, name: str | None) -> MemoryProcessingPipeline:
@@ -203,7 +256,7 @@ class AsyncMemoryService(_ServiceBase):
     def __init__(self, config: MemoryServiceConfig) -> None:
         super().__init__(config)
         self._providers: dict[str, BaseAsyncMemoryProvider] = {}
-        self._pipelines: dict[str, MemoryProcessingPipeline] = {}
+        self._pipelines: dict[str, AsyncMemoryProcessingPipeline] = {}
 
     async def initialize(self, registry: AsyncProviderRegistry | None = None) -> None:
         """Initialize all configured providers atomically.
@@ -215,7 +268,7 @@ class AsyncMemoryService(_ServiceBase):
         """
         reg = registry if registry is not None else default_async_registry
         staged_providers: dict[str, BaseAsyncMemoryProvider] = {}
-        staged_pipelines: dict[str, MemoryProcessingPipeline] = {}
+        staged_pipelines: dict[str, AsyncMemoryProcessingPipeline] = {}
         try:
             for name, provider_config in self._config.provider_configs.items():
                 factory = reg.get(name)
@@ -268,33 +321,87 @@ class AsyncMemoryService(_ServiceBase):
     def get_available_providers(self) -> list[str]:
         return sorted(self._providers.keys())
 
+    # Mirrors MemoryService.ingest — keep the hook logic in sync.
     async def ingest(self, input: IngestInput, provider_name: str | None = None) -> IngestResult:
-        provider = self.get_provider(provider_name)
-        return await provider.ingest(input)
+        """Ingest through the provider's pipeline.
 
+        ``preprocess_ingest`` may split one input into many; each per-item
+        result passes through ``postprocess_ingest``; the merged result
+        concatenates ``created``/``updated``/``unchanged`` in input order.
+        If a per-item ingest raises mid-split, earlier items remain persisted
+        and no merged result is returned, so splitting pipelines should be idempotent.
+        """
+        provider = self.get_provider(provider_name)
+        pipeline = self._pipeline(provider_name)
+        if pipeline.preprocess_ingest is not None:
+            results: list[IngestResult] = []
+            for item in await pipeline.preprocess_ingest(input):
+                result = await provider.ingest(item)
+                if pipeline.postprocess_ingest is not None:
+                    await pipeline.postprocess_ingest(result, item)
+                results.append(result)
+            return _merge_ingest_results(results)
+        result = await provider.ingest(input)
+        if pipeline.postprocess_ingest is not None:
+            await pipeline.postprocess_ingest(result, input)
+        return result
+
+    # Mirrors MemoryService.search — keep the hook logic in sync.
     async def search(self, request: SearchRequest, provider_name: str | None = None) -> SearchResultPage:
-        provider = self.get_provider(provider_name)
-        return await provider.search(request)
+        """Search through the provider's pipeline.
 
+        The PROCESSED request (after ``preprocess_search``) flows to both the
+        provider and ``postprocess_search`` — never the original.
+        """
+        provider = self.get_provider(provider_name)
+        pipeline = self._pipeline(provider_name)
+        processed = await pipeline.preprocess_search(request) if pipeline.preprocess_search is not None else request
+        page = await provider.search(processed)
+        if pipeline.postprocess_search is not None:
+            return await pipeline.postprocess_search(page, processed)
+        return page
+
+    # Mirrors MemoryService.get — keep the hook logic in sync.
     async def get(self, ref: MemoryRef, provider_name: str | None = None) -> Memory | None:
-        provider = self.get_provider(provider_name)
-        return await provider.get(ref)
+        """Get through the provider's pipeline.
 
+        The PROCESSED ref (after ``preprocess_get``) flows to both the
+        provider and ``postprocess_get`` — never the original.
+        """
+        provider = self.get_provider(provider_name)
+        pipeline = self._pipeline(provider_name)
+        processed = await pipeline.preprocess_get(ref) if pipeline.preprocess_get is not None else ref
+        memory = await provider.get(processed)
+        if pipeline.postprocess_get is not None:
+            return await pipeline.postprocess_get(memory, processed)
+        return memory
+
+    # Mirrors MemoryService.delete — keep the hook logic in sync.
     async def delete(self, ref: MemoryRef, provider_name: str | None = None) -> None:
         provider = self.get_provider(provider_name)
         await provider.delete(ref)
 
+    # Mirrors MemoryService.list — keep the hook logic in sync.
     async def list(self, request: ListRequest, provider_name: str | None = None) -> ListResultPage:
+        """List through the provider's pipeline.
+
+        Post-only: there is no list preprocess; the provider receives the
+        ORIGINAL request, which also flows to ``postprocess_list``.
+        """
         provider = self.get_provider(provider_name)
-        return await provider.list(request)
+        pipeline = self._pipeline(provider_name)
+        page = await provider.list(request)
+        if pipeline.postprocess_list is not None:
+            return await pipeline.postprocess_list(page, request)
+        return page
+
+    def _pipeline(self, name: str | None) -> AsyncMemoryProcessingPipeline:
+        provider_name = name or self._default_provider_name
+        return self._pipelines.get(provider_name, NOOP_ASYNC_PIPELINE)
 
     async def package(self, request: PackageRequest, provider_name: str | None = None) -> ContextPackage:
         provider = self.get_provider(provider_name)
         packager = provider.get_extension("package")
         if packager is None or not hasattr(packager, "package"):
-            raise ProviderError(
-                f"Provider '{provider.name}' does not support the 'package' extension",
-                provider=provider.name,
-                context={"operation": "package"},
-            )
+            raise UnsupportedOperationError(provider=provider.name, operation="package")
         return await packager.package(request)  # type: ignore[no-any-return]
