@@ -16,7 +16,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from atomicmemory.memory.pipeline import NOOP_PIPELINE, MemoryProcessingPipeline
+from atomicmemory.memory.pipeline import (
+    NOOP_ASYNC_PIPELINE,
+    NOOP_PIPELINE,
+    AsyncMemoryProcessingPipeline,
+    MemoryProcessingPipeline,
+)
 from atomicmemory.memory.provider import (
     BaseAsyncMemoryProvider,
     BaseMemoryProvider,
@@ -36,7 +41,7 @@ class AsyncProviderRegistration:
     """Async counterpart of `ProviderRegistration`."""
 
     provider: BaseAsyncMemoryProvider
-    pipeline: MemoryProcessingPipeline = NOOP_PIPELINE
+    pipeline: AsyncMemoryProcessingPipeline = NOOP_ASYNC_PIPELINE
 
 
 SyncProviderFactory = Callable[[Any], ProviderRegistration]

@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
-from atomicmemory.core.errors import NotInitializedError, ProviderError, ValidationError
+from atomicmemory.core.errors import InvalidScopeError, NotInitializedError, ProviderError, ValidationError
 from atomicmemory.memory.types import (
     Capabilities,
     ContextPackage,
@@ -267,10 +267,7 @@ class BaseMemoryProvider(ABC):
             return
         missing = _missing_scope_fields(scope, required)
         if missing:
-            raise ValidationError(
-                f"{self.name}: scope is missing required fields for '{operation}': {missing}",
-                context={"operation": operation, "missing": missing, "provider": self.name},
-            )
+            raise InvalidScopeError(self.name, missing, operation)
 
 
 # ---------------------------------------------------------------------------
@@ -358,10 +355,7 @@ class BaseAsyncMemoryProvider(ABC):
             return
         missing = _missing_scope_fields(scope, required)
         if missing:
-            raise ValidationError(
-                f"{self.name}: scope is missing required fields for '{operation}': {missing}",
-                context={"operation": operation, "missing": missing, "provider": self.name},
-            )
+            raise InvalidScopeError(self.name, missing, operation)
 
 
 # Type alias for any provider — useful for client/service signatures that

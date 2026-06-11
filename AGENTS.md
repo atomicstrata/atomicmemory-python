@@ -49,7 +49,7 @@ Before changing code, read the relevant local files first:
 Run before opening any PR:
 
 ```bash
-uv sync
+uv sync --all-extras  # installs dev + embeddings extras; strict mypy needs them
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy atomicmemory --strict

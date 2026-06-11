@@ -4,7 +4,16 @@ All notable changes to `atomicmemory` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.1] - 2026-06-11
+
+### Added
+- `UnsupportedOperationError` (subclass of `ProviderError`) and `InvalidScopeError` (subclass of `ValidationError`), raised where those parents were previously raised bare: a provider missing the `package` extension, and an operation missing required scope fields. Existing `except ProviderError` / `except ValidationError` handlers keep working; consumers can now catch the specific types, matching the TS SDK. Exported from the package root.
+- `AsyncMemoryProcessingPipeline` + `NOOP_ASYNC_PIPELINE` (exported from `atomicmemory.memory` alongside the existing sync type): the async-surface pipeline type used by `AsyncProviderRegistration`.
+- `EntitiesClient` / `AsyncEntitiesClient`: the `entities` namespace over `/v1/entities`, ported from the TS SDK — entity profiles, listing, detail, cascade delete, attribute triples, per-memory history, per-entity settings patching, and entity merge. Wired into `AtomicMemoryClient`/`AsyncAtomicMemoryClient` as `.entities` on the same transport config, closed with the client. Python field names match the snake_case wire directly (the TS camelCase mapping layer has no Python counterpart).
+
+### Changed
+- Registered memory pipelines now actually execute: `MemoryService`/`AsyncMemoryService` run `preprocess_ingest` (which may split one input into many; per-item results merge in order), `postprocess_ingest`, `preprocess_search`/`postprocess_search` (postprocess receives the processed request), `preprocess_get`/`postprocess_get`, and `postprocess_list`, matching the TS `MemoryService` semantics. `delete` and `package` take no pipeline. Before 1.1.1 these hooks were accepted at registration but never invoked. Hook exceptions propagate unwrapped — hooks are caller-supplied code.
+- `MemoryProcessingPipeline` hook signatures are now synchronous (the async surface uses `AsyncMemoryProcessingPipeline`). Type-hint change only for code that constructed pipelines — which received no behavior before this release.
 
 ## [1.1.0] - 2026-06-09
 

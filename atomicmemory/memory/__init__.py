@@ -19,6 +19,12 @@ from atomicmemory.memory.meta_fact_filter import (
     is_meta_fact,
     resolve_meta_fact_patterns,
 )
+from atomicmemory.memory.pipeline import (
+    NOOP_ASYNC_PIPELINE,
+    NOOP_PIPELINE,
+    AsyncMemoryProcessingPipeline,
+    MemoryProcessingPipeline,
+)
 from atomicmemory.memory.types import (
     Capabilities,
     CapabilitiesExtensions,
@@ -59,6 +65,9 @@ from atomicmemory.memory.types import (
 
 __all__ = [
     "DEFAULT_META_FACT_PATTERNS",
+    "NOOP_ASYNC_PIPELINE",
+    "NOOP_PIPELINE",
+    "AsyncMemoryProcessingPipeline",
     "Capabilities",
     "CapabilitiesExtensions",
     "CapabilitiesRequiredScope",
@@ -82,6 +91,7 @@ __all__ = [
     "ListResultPage",
     "Memory",
     "MemoryKind",
+    "MemoryProcessingPipeline",
     "MemoryRef",
     "MemoryVersion",
     "MemoryVersionEvent",

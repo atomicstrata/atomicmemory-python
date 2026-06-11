@@ -1,0 +1,55 @@
+# Publish atomicmemory to PyPI via OIDC Trusted Publishing.
+#
+# Runs ONLY on the public mirror (atomicstrata/atomicmemory-python), which is
+# the clean release surface under the manual-snapshot sync model: this file
+# rides a snapshot PR out from am-python-internal, but the `if` guard keeps it
+# inert on the private dev repo (which has no PyPI trusted-publisher binding).
+#
+# Manual, version-gated dispatch — never on push/tag — so a routine snapshot
+# sync can never trigger a publish. The `pypi-release` environment supplies the
+# human-approval gate that the local `uv publish` workflow used to provide.
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish — must equal pyproject.toml's version and not already exist on PyPI."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.repository == 'atomicstrata/atomicmemory-python'
+    runs-on: ubuntu-latest
+    environment: pypi-release
+    permissions:
+      id-token: write # OIDC token for Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Verify version matches and is unpublished
+        run: |
+          pkg_version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+          if [ "${pkg_version}" != "${{ inputs.version }}" ]; then
+            echo "::error::pyproject.toml version '${pkg_version}' != requested '${{ inputs.version }}'"
+            exit 1
+          fi
+          status="$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/atomicmemory/${pkg_version}/json")"
+          if [ "${status}" = "200" ]; then
+            echo "::error::atomicmemory ${pkg_version} is already on PyPI; bump the version first"
+            exit 1
+          fi
+          echo "Publishing atomicmemory ${pkg_version} (PyPI returned ${status} for the existence check)."
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      - name: Publish to PyPI (Trusted Publishing, with attestations)
+        uses: pypa/gh-action-pypi-publish@release/v1
