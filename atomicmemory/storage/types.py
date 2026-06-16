@@ -8,9 +8,10 @@ SDK's camelCase spellings at the public boundary.
 from __future__ import annotations
 
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+
+from atomicmemory.core.url import validate_api_url
 
 StorageArtifactStatus = Literal[
     "stored",
@@ -42,15 +43,9 @@ class StorageClientConfig(BaseModel):
     api_key: SecretStr = Field(alias="apiKey")
     user_id: str = Field(alias="userId")
     timeout_seconds: float = Field(default=30.0, alias="timeoutSeconds")
-
-    @field_validator("api_url")
-    @classmethod
-    def _validate_api_url(cls, value: str) -> str:
-        stripped = value.strip()
-        parsed = urlparse(stripped)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("api_url must be an http(s) URL")
-        return stripped
+    allow_private_networks: bool = Field(default=True, alias="allowPrivateNetworks")
+    """Permit loopback/private/reserved IP literals in ``api_url`` (default True;
+    set False to harden). Link-local / cloud-metadata stay blocked regardless."""
 
     @field_validator("api_key", mode="before")
     @classmethod
@@ -81,6 +76,7 @@ class StorageClientConfig(BaseModel):
     def _require_non_empty(self) -> StorageClientConfig:
         if not self.api_url:
             raise ValueError("api_url is required")
+        self.api_url = validate_api_url(self.api_url, allow_private_networks=self.allow_private_networks)
         # api_key is always truthy as SecretStr; empty string rejected by _validate_api_key above.
         if not self.user_id:
             raise ValueError("user_id is required")
