@@ -5,8 +5,9 @@ Port of `atomicmemory-sdk/src/memory/atomicmemory-provider/types.ts:1-36`.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from atomicmemory.core.url import validate_api_url
 from atomicmemory.memory.meta_fact_filter import MetaFactFilterConfig
 
 ATOMICMEMORY_DEFAULT_TIMEOUT_SECONDS: float = 30.0
@@ -41,3 +42,12 @@ class AtomicMemoryProviderConfig(BaseModel):
 
     meta_fact_filter: MetaFactFilterConfig | None = Field(default=None, alias="metaFactFilter")
     """Optional opt-in post-retrieval meta-fact filter. Off when unset."""
+
+    allow_private_networks: bool = Field(default=True, alias="allowPrivateNetworks")
+    """Permit loopback/private/reserved IP literals in ``api_url`` (default True;
+    set False to harden). Link-local / cloud-metadata stay blocked regardless."""
+
+    @model_validator(mode="after")
+    def _validate_api_url(self) -> AtomicMemoryProviderConfig:
+        self.api_url = validate_api_url(self.api_url, allow_private_networks=self.allow_private_networks)
+        return self

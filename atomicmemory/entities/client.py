@@ -25,12 +25,13 @@ import builtins
 import json
 from types import TracebackType
 from typing import Any, TypeVar, cast
-from urllib.parse import quote, urlencode, urlparse
+from urllib.parse import quote, urlencode
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
+from atomicmemory.core.url import validate_api_url
 from atomicmemory.entities.errors import EntitiesClientError
 from atomicmemory.entities.types import (
     DeleteEntityResult,
@@ -63,15 +64,14 @@ class EntitiesClientConfig(BaseModel):
     api_url: str = Field(alias="apiUrl")
     api_key: SecretStr = Field(alias="apiKey")
     timeout_seconds: float = Field(default=30.0, alias="timeoutSeconds")
+    allow_private_networks: bool = Field(default=True, alias="allowPrivateNetworks")
+    """Permit loopback/private/reserved IP literals in ``api_url`` (default True;
+    set False to harden). Link-local / cloud-metadata stay blocked regardless."""
 
-    @field_validator("api_url")
-    @classmethod
-    def _validate_api_url(cls, value: str) -> str:
-        stripped = value.strip()
-        parsed = urlparse(stripped)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("api_url must be an http(s) URL")
-        return stripped
+    @model_validator(mode="after")
+    def _validate_api_url(self) -> EntitiesClientConfig:
+        self.api_url = validate_api_url(self.api_url, allow_private_networks=self.allow_private_networks)
+        return self
 
     @field_validator("api_key", mode="before")
     @classmethod

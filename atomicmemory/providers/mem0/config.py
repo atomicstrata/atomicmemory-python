@@ -5,7 +5,9 @@ Port of `atomicmemory-sdk/src/memory/mem0-provider/types.ts`.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from atomicmemory.core.url import validate_api_url
 
 MEM0_DEFAULT_TIMEOUT_SECONDS: float = 30.0
 MEM0_DEFAULT_PATH_PREFIX: str = "/v1"
@@ -49,3 +51,12 @@ class Mem0ProviderConfig(BaseModel):
 
     org_id: str | None = Field(default=None, alias="orgId")
     project_id: str | None = Field(default=None, alias="projectId")
+
+    allow_private_networks: bool = Field(default=True, alias="allowPrivateNetworks")
+    """Permit loopback/private/reserved IP literals in ``api_url`` (default True;
+    set False to harden). Link-local / cloud-metadata stay blocked regardless."""
+
+    @model_validator(mode="after")
+    def _validate_api_url(self) -> Mem0ProviderConfig:
+        self.api_url = validate_api_url(self.api_url, allow_private_networks=self.allow_private_networks)
+        return self

@@ -4,6 +4,23 @@ All notable changes to `atomicmemory` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-06-15
+
+### Security
+- `api_url` is now validated against SSRF across all six SDK configs (the three
+  provider configs, the storage/client configs, and `EntitiesClientConfig`) via
+  one shared validator. It always rejects link-local / cloud-metadata addresses
+  (AWS IMDS `169.254.169.254`, IPv6 `fe80::/10`) — including their decimal
+  (`http://2852039166/`), hex, octal, short-form, and IPv4-mapped-IPv6
+  (`::ffff:169.254.169.254`) encodings, which are canonicalized so they cannot
+  bypass the guard. Loopback / private / reserved IP literals remain allowed by
+  default — the SDK routinely connects to local and self-hosted cores — and are
+  rejected only when you opt into strict mode with `allowPrivateNetworks=False`.
+  Hostnames (incl. the `localhost` default) are intentionally not DNS-resolved
+  at config time. This matches the Node SDK's posture for cross-SDK parity, and
+  a reflective enumeration test fails if a new `api_url` config omits the guard.
+  (FailSafe AGNT-PY-001.)
+
 ## [1.1.1] - 2026-06-11
 
 ### Added

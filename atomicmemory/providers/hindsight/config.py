@@ -9,8 +9,9 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from atomicmemory.core.url import validate_api_url
 from atomicmemory.memory.types import IngestInput, Scope
 
 HindsightRecallBudget = Literal["low", "mid", "high"]
@@ -38,6 +39,14 @@ class HindsightProviderConfig(BaseModel):
     project_id: str = Field(default=HINDSIGHT_DEFAULT_PROJECT_ID, alias="projectId")
     default_budget: HindsightRecallBudget | None = Field(default=None, alias="defaultBudget")
     default_max_tokens: int | None = Field(default=None, alias="defaultMaxTokens")
+    allow_private_networks: bool = Field(default=True, alias="allowPrivateNetworks")
+    """Permit loopback/private/reserved IP literals in ``api_url`` (default True;
+    set False to harden). Link-local / cloud-metadata stay blocked regardless."""
+
+    @model_validator(mode="after")
+    def _validate_api_url(self) -> HindsightProviderConfig:
+        self.api_url = validate_api_url(self.api_url, allow_private_networks=self.allow_private_networks)
+        return self
 
 
 class HindsightRetainResponse(BaseModel):
