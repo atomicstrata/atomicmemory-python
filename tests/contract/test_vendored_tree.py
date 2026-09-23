@@ -35,9 +35,15 @@ def test_vendored_manifest_pins_the_exact_vendored_source() -> None:
     vendored = json.loads((CONTRACT / "VENDORED.json").read_text())
     assert set(vendored) >= REQUIRED_VENDORED_FIELDS
     assert vendored["source_repo"] == "atomicmemory-internal"
-    assert vendored["source_sdk_version"] == "1.1.0"
-    assert vendored["source_main_commit"] == "2a67871"
-    assert vendored["schema_last_modified_commit"] == "6fccaf4"
+    assert vendored["source_sdk_version"] == "1.1.1"
+    # These two pins are INDEPENDENT and are copied from the manifest the
+    # refresh script generates, not set by hand: source_main_commit is the
+    # source checkout's HEAD, while schema_last_modified_commit is
+    # `git log -1 -- <vendored paths>`. They differ here exactly as expected —
+    # HEAD is the merge commit for atomicmemory-internal#76, while the schema
+    # was last touched by the commit that PR merged.
+    assert vendored["source_main_commit"] == "67f58c9"
+    assert vendored["schema_last_modified_commit"] == "46bc34c"
 
 
 def test_corpus_manifest_cases_and_schemas_all_exist() -> None:

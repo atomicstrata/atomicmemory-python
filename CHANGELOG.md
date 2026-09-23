@@ -4,6 +4,21 @@ All notable changes to `atomicmemory` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-09-22
+
+### Fixed
+- Encode explicit `content_class` on verbatim ingest in the v1 contract codec.
+  Text and messages modes still reject the field because the v1 wire contract
+  does not expose it on those modes. No content class is inferred or defaulted.
+- Refresh the vendored contract schema and provenance to include the verbatim
+  content-class field.
+
+### Security
+- Refresh the development/source lockfile past the reported AnyIO, idna,
+  setuptools, Transformers, and Torch advisory ranges. This updates the locked
+  environment, not the SDK's dependency constraints; existing installations
+  should also update their dependencies.
+
 ## [1.1.2] - 2026-06-15
 
 ### Security

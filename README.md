@@ -21,7 +21,8 @@ This is a Python port of the TypeScript [`atomicmemory-sdk`](https://github.com/
 
 ## Status
 
-Stable release — `1.1.0` on [PyPI](https://pypi.org/project/atomicmemory/); `1.2.0` staged on main.
+Stable releases are available on [PyPI](https://pypi.org/project/atomicmemory/).
+This source tree prepares version `1.1.3`; consult PyPI for publication status.
 
 ## Installation
 
