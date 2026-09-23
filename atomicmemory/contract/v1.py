@@ -345,11 +345,20 @@ def decode_search_request(wire: dict[str, Any]) -> SearchRequest:
 def encode_ingest_input(model: IngestInput) -> dict[str, Any]:
     """Encode the in-process IngestInput model into the v1 wire form.
 
-    Routes ``provenance`` through :func:`encode_provenance`. Raises
-    ``ValueError`` if ``content_class`` is set: the v1 schemas have
-    ``additionalProperties: false`` with no ``content_class`` field, so
-    emitting it would be wire-invalid. This field is Python-ahead; the TS
-    contract catch-up is the recorded follow-up.
+    Routes ``provenance`` through :func:`encode_provenance`.
+
+    ``content_class`` is emitted for ``mode="verbatim"``, which the v1
+    ``VerbatimIngest`` schema now carries. It is REFUSED for ``text`` and
+    ``messages``: those schemas remain ``additionalProperties: false`` without
+    the field, so emitting it would produce a wire-invalid payload. The Python
+    models carry ``content_class`` on ``IngestBase`` (every mode), so this
+    boundary is what keeps a valid in-process model from encoding into an
+    invalid request. Core's HTTP API does consult the field on extraction paths
+    for audit-transcript redaction — extending the contract to those modes is
+    tracked separately, since it changes what is durably retained.
+
+    This codec never infers a class: an omission stays an omission and fails
+    closed at core rather than being relabeled here as safe.
 
     Args:
         model: The in-process ingest input model (any mode variant).
@@ -358,18 +367,14 @@ def encode_ingest_input(model: IngestInput) -> dict[str, Any]:
         A wire-format dict suitable for JSON serialization.
 
     Raises:
-        ValueError: If the model carries ``content_class`` (Python-only field
-            not present in the v1 wire schema).
+        ValueError: If a non-verbatim ingest carries ``content_class``.
     """
-    # Deliberately generic (getattr, not an isinstance check on a single mode):
-    # content_class lives on IngestBase, so every ingest mode carries it and
-    # every mode must fail closed here until the v1 contract adds the field.
     content_class = getattr(model, "content_class", None)
-    if content_class is not None:
+    if content_class is not None and getattr(model, "mode", None) != "verbatim":
         raise ValueError(
-            f"content_class={content_class!r} is a Python-ahead field with no place in the v1 wire "
-            "schema (additionalProperties: false). Strip it before encoding, or wait for the TS "
-            "contract to add it."
+            f"content_class={content_class!r} is only valid on verbatim ingest in the v1 wire "
+            f"schema (mode={getattr(model, 'mode', None)!r} is additionalProperties: false "
+            "without it). Drop it, or use mode='verbatim'."
         )
     data = model.model_dump(mode="json", exclude_none=True)
     if "provenance" in data and isinstance(data["provenance"], dict):

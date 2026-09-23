@@ -3,7 +3,7 @@
 Each test exercises a specific codec boundary: camel↔snake field renames,
 ``_to_iso_z`` millisecond precision, provenance nesting in Memory and ingest,
 ``rankingScore`` mapping, page round-trip, datetime-filter normalization, and
-the ``content_class`` rejection guard.
+``content_class`` emission on the verbatim path.
 """
 
 from __future__ import annotations
@@ -17,10 +17,13 @@ from atomicmemory.contract import v1
 from atomicmemory.memory.filters import FilterExpr
 from atomicmemory.memory.types import (
     Memory,
+    Message,
+    MessageIngest,
     Provenance,
     Scope,
     SearchRequest,
     SearchResultPage,
+    TextIngest,
     VerbatimIngest,
 )
 
@@ -163,10 +166,48 @@ def test_decoded_null_version_id_normalizes_to_absent_on_encode() -> None:
     assert "version_id" not in v1.encode_search_result(result)
 
 
-def test_encode_ingest_input_rejects_python_only_content_class() -> None:
+def test_encode_ingest_input_emits_content_class() -> None:
+    # v1 VerbatimIngest carries content_class, so it must reach the wire: core
+    # refuses an unclassified verbatim write under RAW_CONTENT_POLICY=reject,
+    # and silently dropping the caller's stamp here would turn a correctly
+    # classified write into a 422.
     model = VerbatimIngest(content="x", scope=Scope(user="u"), content_class="summary")
-    with pytest.raises(ValueError, match="content_class"):
+    assert v1.encode_ingest_input(model)["content_class"] == "summary"
+
+
+def test_encode_ingest_input_rejects_content_class_on_text_ingest() -> None:
+    # The Python models carry content_class on IngestBase (every mode), but the
+    # v1 TextIngest schema is additionalProperties:false without it. Encoding it
+    # would emit a wire-invalid payload from a perfectly valid model, so the
+    # codec refuses at this boundary.
+    model = TextIngest(content="x", scope=Scope(user="u"), content_class="summary")
+    with pytest.raises(ValueError, match="only valid on verbatim"):
         v1.encode_ingest_input(model)
+
+
+def test_encode_ingest_input_rejects_content_class_on_messages_ingest() -> None:
+    model = MessageIngest(
+        messages=[Message(role="user", content="x")],
+        scope=Scope(user="u"),
+        content_class="summary",
+    )
+    with pytest.raises(ValueError, match="only valid on verbatim"):
+        v1.encode_ingest_input(model)
+
+
+def test_encode_ingest_input_allows_non_verbatim_without_content_class() -> None:
+    # The guard is scoped to the field, not the mode: an ordinary text ingest
+    # still encodes.
+    encoded = v1.encode_ingest_input(TextIngest(content="x", scope=Scope(user="u")))
+    assert encoded["mode"] == "text"
+    assert "content_class" not in encoded
+
+
+def test_encode_ingest_input_omits_absent_content_class() -> None:
+    # Absence stays absence — the codec never infers a class, so an unstamped
+    # write fails closed at core instead of being relabeled safe here.
+    model = VerbatimIngest(content="x", scope=Scope(user="u"))
+    assert "content_class" not in v1.encode_ingest_input(model)
 
 
 def test_decode_memory_rejects_in_process_snake_date_key() -> None:
@@ -205,3 +246,29 @@ def test_decode_search_request_is_passthrough() -> None:
     assert model.query == "deploy gate"
     assert model.limit == 5
     assert model.scope.user == "u1"
+
+
+def test_encoded_content_class_validates_against_the_v1_schema() -> None:
+    # The encoder emitting content_class is only correct if the wire schema
+    # accepts it: VerbatimIngest is additionalProperties:false, so a schema that
+    # had not been updated would reject the very payload the encoder produces.
+    # This pins encoder and schema together rather than trusting either alone.
+    from tests.contract._schema_registry import validator_for
+
+    encoded = v1.encode_ingest_input(VerbatimIngest(content="x", scope=Scope(user="u"), content_class="summary"))
+    validator_for("ingest-input.schema.json").validate(encoded)
+
+
+def test_v1_schema_still_rejects_an_unknown_ingest_field() -> None:
+    # Guard the guard: prove additionalProperties:false is still doing work, so
+    # the test above passing means "content_class was added", not "the schema
+    # stopped constraining anything".
+    import jsonschema
+    import pytest as _pytest
+
+    from tests.contract._schema_registry import validator_for
+
+    encoded = v1.encode_ingest_input(VerbatimIngest(content="x", scope=Scope(user="u")))
+    encoded["not_a_real_field"] = "x"
+    with _pytest.raises(jsonschema.ValidationError):
+        validator_for("ingest-input.schema.json").validate(encoded)
