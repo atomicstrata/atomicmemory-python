@@ -22,7 +22,7 @@ This is a Python port of the TypeScript [`atomicmemory-sdk`](https://github.com/
 ## Status
 
 Stable releases are available on [PyPI](https://pypi.org/project/atomicmemory/).
-This source tree prepares version `1.1.4`; consult PyPI for publication status.
+Version `1.1.4` is available on PyPI with the memory tool factories below.
 
 ## Installation
 
@@ -87,9 +87,13 @@ asyncio.run(main())
 
 ## Agent-selected memory tools
 
-The following API is new in source version **1.1.4**, which is not yet published.
-The published 1.1.3 package does not export these factories. For contributor
-verification, use `uv sync --all-extras` in this checkout.
+The following API requires **1.1.4** or later. Install the verified release:
+
+```bash
+pip install 'atomicmemory==1.1.4'
+```
+
+For contributor verification, use `uv sync --all-extras` in this checkout.
 
 ```python
 import os
