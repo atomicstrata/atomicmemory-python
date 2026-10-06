@@ -20,6 +20,7 @@ from atomicmemory.core.errors import (
     InvalidScopeError,
     NetworkError,
     NotInitializedError,
+    PendingIngestError,
     ProviderError,
     RateLimitError,
     UnsupportedOperationError,
@@ -124,6 +125,16 @@ from atomicmemory.storage import (
     VerificationResult,
     VerifyArtifactOptions,
 )
+from atomicmemory.tools import (
+    AsyncMemoryTool,
+    AsyncMemoryTools,
+    MemoryTool,
+    MemoryToolError,
+    MemoryTools,
+    async_memory_tools,
+    memory_tools,
+)
+from atomicmemory.tools_models import MemorySearchHit, MemorySearchOutput
 
 __all__ = [
     "DEFAULT_META_FACT_PATTERNS",
@@ -136,6 +147,8 @@ __all__ = [
     "AsyncAtomicMemoryClient",
     "AsyncEntitiesClient",
     "AsyncMemoryClient",
+    "AsyncMemoryTool",
+    "AsyncMemoryTools",
     "AsyncProviderStatus",
     "AsyncStorageClient",
     "AtomicMemoryClient",
@@ -190,6 +203,11 @@ __all__ = [
     "MemoryKind",
     "MemoryNamespaceConfig",
     "MemoryRef",
+    "MemorySearchHit",
+    "MemorySearchOutput",
+    "MemoryTool",
+    "MemoryToolError",
+    "MemoryTools",
     "MemoryVersion",
     "MemoryVersionEvent",
     "MergeEntitiesResult",
@@ -202,6 +220,7 @@ __all__ = [
     "NotInitializedError",
     "PackageFormat",
     "PackageRequest",
+    "PendingIngestError",
     "PointerContentNotManagedError",
     "Profile",
     "Provenance",
@@ -230,9 +249,11 @@ __all__ = [
     "VerificationResult",
     "VerifyArtifactOptions",
     "__version__",
+    "async_memory_tools",
     "capability_gaps",
     "filter_meta_facts",
     "is_meta_fact",
+    "memory_tools",
     "resolve_meta_fact_patterns",
     "satisfies_profile",
 ]

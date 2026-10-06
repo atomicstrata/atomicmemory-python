@@ -22,7 +22,7 @@ This is a Python port of the TypeScript [`atomicmemory-sdk`](https://github.com/
 ## Status
 
 Stable releases are available on [PyPI](https://pypi.org/project/atomicmemory/).
-This source tree prepares version `1.1.3`; consult PyPI for publication status.
+This source tree prepares version `1.1.4`; consult PyPI for publication status.
 
 ## Installation
 
@@ -84,6 +84,68 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+## Agent-selected memory tools
+
+The following API is new in source version **1.1.4**, which is not yet published.
+The published 1.1.3 package does not export these factories. For contributor
+verification, use `uv sync --all-extras` in this checkout.
+
+```python
+import os
+from atomicmemory import MemoryClient, memory_tools
+
+with MemoryClient(providers={"atomicmemory": {
+    "api_url": "https://api.atomicstrata.ai",
+    "api_key": os.environ["ATOMICMEMORY_API_KEY"],
+}}) as client:
+    client.initialize()
+    tools = memory_tools(client=client, user="authenticated-app-user")
+    result = tools["memory_ingest"].execute({"content": "I prefer tea."})
+    page = tools["memory_search"].execute({"query": "drink preference"})
+```
+
+Each descriptor has `name`, `description`, `parameters` as JSON Schema, and
+`execute(arguments)`. Register those with your agent framework and serialize
+results with `model_dump(mode="json", exclude_none=True)`. For async code, use
+`AsyncMemoryClient`, `await client.initialize()`, `async_memory_tools`, and
+`await tools[name].execute(arguments)`.
+
+User identity, endpoint and credentials stay in application configuration.
+Arguments accept only `content` for ingest or `query` and an optional `limit`
+for search. Both operations keep the configured user, and reject model-supplied
+identity or transport fields. Search defaults to five hits, accepts limits up
+to 20, and bounds displayed text while retaining score, version and retrieval
+evidence. Backend metadata is excluded from model-facing hits.
+
+The tools propagate a safe `MemoryToolError` rather than raw backend errors.
+Async cancellation propagates. No write is automatically retried. HTTP 202
+is pending, and the direct SDK raises `PendingIngestError`; tools fail safely.
+Empty ingest arrays do not confirm a save. IDs are backend reports, not terminal
+correction receipts. See [ATO-2333](https://linear.app/atomic-strata/issue/ATO-2333)
+and [ATO-2334](https://linear.app/atomic-strata/issue/ATO-2334) for those contracts.
+
+The [single-operation example](examples/memory_tools.py) exercises separate
+processes against your explicitly configured backend:
+
+```bash
+export ATOMICMEMORY_API_KEY=your-server-key
+export ATOMICMEMORY_USER=synthetic-demo-user
+uv run python examples/memory_tools.py ingest 'I prefer tea.'
+uv run python examples/memory_tools.py search 'drink preference' --async
+uv run python examples/memory_tools.py ingest 'I now prefer coffee.' --async
+uv run python examples/memory_tools.py search 'drink preference'
+```
+
+Use `ATOMICMEMORY_API_URL=http://localhost:17350` for a local Core with its
+appropriate explicit key. A local transport fixture verifies sync/async wire
+parity, process restart and synthetic correction; it does not verify hosted
+persistence or actual engine correction. Hosted completion still depends on
+[ATO-2425](https://linear.app/atomic-strata/issue/ATO-2425). Python requires
+explicit provider configuration; it does not inherit TypeScript's zero-argument
+constructor behavior. Agent-selected tools let the agent choose when to read
+and write. Automatic capture/retrieval remains a separate deferred investigation
+in [ATO-2420](https://linear.app/atomic-strata/issue/ATO-2420).
 
 ## AtomicMemory-specific features
 

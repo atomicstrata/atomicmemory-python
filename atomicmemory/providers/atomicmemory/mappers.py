@@ -9,7 +9,9 @@ via the small normalization helper below).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field, TypeAdapter
 
 from atomicmemory.memory.types import (
     IngestResult,
@@ -21,6 +23,8 @@ from atomicmemory.memory.types import (
     Scope,
     SearchResult,
 )
+
+_INGEST_IDS = TypeAdapter(list[Annotated[str, Field(min_length=1)]])
 
 _AUDIT_EVENTS: set[MemoryVersionEvent] = {"created", "updated", "superseded", "invalidated"}
 
@@ -132,8 +136,8 @@ def to_retrieval_receipt(raw: dict[str, Any]) -> RetrievalReceipt:
 def to_ingest_result(raw: dict[str, Any]) -> IngestResult:
     """Map ``POST /memories/ingest[/quick]`` response to V3 IngestResult."""
     return IngestResult(
-        created=list(raw.get("stored_memory_ids") or []),
-        updated=list(raw.get("updated_memory_ids") or []),
+        created=_INGEST_IDS.validate_python(raw.get("stored_memory_ids", []), strict=True),
+        updated=_INGEST_IDS.validate_python(raw.get("updated_memory_ids", []), strict=True),
         unchanged=[],
     )
 

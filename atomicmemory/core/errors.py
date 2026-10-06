@@ -75,6 +75,17 @@ class ProviderError(AtomicMemoryError):
         self.response_body = response_body
 
 
+class PendingIngestError(ProviderError):
+    """HTTP 202 accepted a write; no terminal ingest result is available."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Ingest is pending; saving is not confirmed. Do not retry automatically.",
+            provider="atomicmemory",
+            status_code=202,
+        )
+
+
 class NetworkError(AtomicMemoryError):
     """A transport-level failure (timeout, connection refused, DNS, etc.)."""
 

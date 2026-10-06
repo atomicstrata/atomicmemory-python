@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 
-from atomicmemory.core.errors import NetworkError, ProviderError, RateLimitError
+from atomicmemory.core.errors import NetworkError, PendingIngestError, ProviderError, RateLimitError
 
 _PROVIDER_NAME = "atomicmemory"
 
@@ -117,10 +117,13 @@ def fetch_json(
     *,
     method: str = "GET",
     json: Any | None = None,
+    require_completed: bool = False,
 ) -> Any:
     """Send a request and return the decoded JSON response body."""
     response = _request(client, options, method, path, json=json)
     _raise_for_status(response, path)
+    if require_completed and response.status_code == 202:
+        raise PendingIngestError()
     return response.json()
 
 
@@ -211,9 +214,12 @@ async def afetch_json(
     *,
     method: str = "GET",
     json: Any | None = None,
+    require_completed: bool = False,
 ) -> Any:
     response = await _arequest(client, options, method, path, json=json)
     _raise_for_status(response, path)
+    if require_completed and response.status_code == 202:
+        raise PendingIngestError()
     return response.json()
 
 
