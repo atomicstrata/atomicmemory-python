@@ -102,7 +102,9 @@ class AtomicMemoryProvider(BaseMemoryProvider):
     def do_ingest(self, input: IngestInput) -> IngestResult:
         body = _build_ingest_body(input)
         path = self._route("/memories/ingest/quick" if input.mode == "verbatim" else "/memories/ingest")
-        raw = fetch_json(self._require_client(), self._http_options, path, method="POST", json=body)
+        raw = fetch_json(
+            self._require_client(), self._http_options, path, method="POST", json=body, require_completed=True
+        )
         return to_ingest_result(raw)
 
     def _apply_meta_fact_filter(self, results: list[SearchResult]) -> list[SearchResult]:

@@ -50,7 +50,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Mypy strict
-        run: uv run mypy atomicmemory --strict
+        run: uv run mypy atomicmemory examples/memory_tools.py --strict
 
       # `.vulture_whitelist.py` is required: it allowlists Protocol-method
       # parameter names and context-manager dunder args that vulture
@@ -62,3 +62,6 @@ jobs:
       # atomicmemory-core via ATOMICMEMORY_TEST_API_URL).
       - name: Pytest
         run: uv run pytest -m 'not integration'
+
+      - name: Verify tools from installed wheel
+        run: bash scripts/verify_tools_wheel.sh
